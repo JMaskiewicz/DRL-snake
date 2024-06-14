@@ -14,6 +14,8 @@ class SnakeGameAI:
         self.model = model  # AI model
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
+
+        self.obstacles = [(50, 50)]
         self.reset()
 
     def reset(self):
@@ -105,4 +107,4 @@ class SnakeGameAI:
 # Example usage:
 if __name__ == '__main__':
     game = SnakeGameAI()
-    game.run_game()  # Run as a human
+    game.run_game()
