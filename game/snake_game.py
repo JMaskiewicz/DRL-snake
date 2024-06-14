@@ -42,9 +42,11 @@ class SnakeGameAI:
 
     def spawn_enemy(self):
         enemy = []
-        start_pos = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
-        for i in range(5):  # Length of enemy snake
-            enemy.append((start_pos[0], start_pos[1] + i))
+        while True:
+            start_pos = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
+            enemy = [(start_pos[0], start_pos[1] + i) for i in range(5)]
+            if all(0 <= part[1] < self.size for part in enemy) and all(part not in self.snake for part in enemy):
+                break
         return enemy
 
     def move_enemy(self, enemy):
@@ -57,22 +59,26 @@ class SnakeGameAI:
             new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
 
         enemy.insert(0, new_head)
-        if new_head == self.apple:
-            self.apple = self.spawn_apple()  # Respawn apple
+        if new_head in self.apples:
+            self.apples[self.apples.index(new_head)] = self.spawn_apple()  # Respawn apple
         else:
             enemy.pop()
 
     def get_state(self):
         state = np.zeros((self.size, self.size), dtype=int)
         for s in self.snake:
-            state[s] = 1
+            if 0 <= s[0] < self.size and 0 <= s[1] < self.size:
+                state[s] = 1
         for apple in self.apples:  # Multiple apples
-            state[apple] = 2
+            if 0 <= apple[0] < self.size and 0 <= apple[1] < self.size:
+                state[apple] = 2
         for obs in self.obstacles:
-            state[obs] = -1
+            if 0 <= obs[0] < self.size and 0 <= obs[1] < self.size:
+                state[obs] = -1
         for enemy in self.enemies:
             for part in enemy:
-                state[part] = -2
+                if 0 <= part[0] < self.size and 0 <= part[1] < self.size:
+                    state[part] = -2
         return state.flatten()
 
     def step(self, action):
@@ -91,10 +97,11 @@ class SnakeGameAI:
 
         self.snake.insert(0, new_head)
 
-        if new_head == self.apple:
+        # Check if new_head is in any apple positions
+        if new_head in self.apples:
             self.score += 1
             reward = 10  # Reward for eating apple
-            self.apple = self.spawn_apple()
+            self.apples[self.apples.index(new_head)] = self.spawn_apple()  # Replace the eaten apple
         else:
             self.snake.pop()
             reward = 0
@@ -109,14 +116,14 @@ class SnakeGameAI:
         direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
         return direction_map.get(direction, 0)
 
-
     def render(self):
         self.screen.fill((0, 0, 0))
         for x, y in self.snake:
             pygame.draw.rect(self.screen, (0, 255, 0),
                              (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
-        pygame.draw.rect(self.screen, (255, 0, 0), (
-        self.apple[0] * self.cell_size, self.apple[1] * self.cell_size, self.cell_size, self.cell_size))
+        for apple in self.apples:
+            pygame.draw.rect(self.screen, (255, 0, 0),
+                             (apple[0] * self.cell_size, apple[1] * self.cell_size, self.cell_size, self.cell_size))
         for enemy in self.enemies:
             for x, y in enemy:
                 pygame.draw.rect(self.screen, (255, 200, 0),
