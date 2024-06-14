@@ -3,7 +3,7 @@ import numpy as np
 import random
 
 class SnakeGameAI:
-    def __init__(self, model=None):
+    def __init__(self, model=None, obstacles=None, enemy_snake=None):
         pygame.init()
         self.size = 64
         self.cell_size = 10
@@ -15,31 +15,31 @@ class SnakeGameAI:
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
 
-        self.obstacles = [(50, 50)]
+        self.obstacles = obstacles if obstacles is not None else []
         self.reset()
 
     def reset(self):
         self.snake = [(self.size // 2, self.size // 2)]
-        self.direction = (0, -1)  # Initial direction: up
+        self.direction = (0, -1)
         self.apple = self.spawn_apple()
         self.score = 0
         self.done = False
-        self.obstacles = [(50, 50)]  # Static obstacle for simplicity
+        self.obstacles = obstacles if obstacles is not None else []
         return self.get_state()
 
     def spawn_apple(self):
         while True:
             apple = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
-            if apple not in self.snake and apple not in self.obstacles:
+            if apple not in self.snake and (self.obstacles is None or apple not in self.obstacles):
                 return apple
 
     def get_state(self):
         state = np.zeros((self.size, self.size), dtype=int)
         for s in self.snake:
-            state[s] = 1  # Snake body part
-        state[self.apple] = 2  # Apple location
+            state[s] = 1
+        state[self.apple] = 2
         for obs in self.obstacles:
-            state[obs] = -1  # Obstacles
+            state[obs] = -1
         return state.flatten()
 
     def step(self, action):
@@ -78,23 +78,25 @@ class SnakeGameAI:
             pygame.draw.rect(self.screen, (0, 0, 255), (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
         pygame.display.flip()
 
+    def direction_to_index(self, direction):
+        direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
+        return direction_map.get(direction, 0)
+
     def run_game(self):
         while not self.done:
-            if self.is_human:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        self.done = True
-                    elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_w:
-                            self.step(0)
-                        elif event.key == pygame.K_s:
-                            self.step(1)
-                        elif event.key == pygame.K_a:
-                            self.step(2)
-                        elif event.key == pygame.K_d:
-                            self.step(3)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.done = True
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_w and self.direction != (0, 1):  # Prevent reversing
+                        self.direction = (0, -1)
+                    elif event.key == pygame.K_s and self.direction != (0, -1):  # Prevent reversing
+                        self.direction = (0, 1)
+                    elif event.key == pygame.K_a and self.direction != (1, 0):  # Prevent reversing
+                        self.direction = (-1, 0)
+                    elif event.key == pygame.K_d and self.direction != (-1, 0):  # Prevent reversing
+                        self.direction = (1, 0)
             else:
-                # AI makes its move
                 prediction = self.model.predict(self.get_state().reshape(1, -1))
                 self.step(np.argmax(prediction))
 
@@ -106,5 +108,6 @@ class SnakeGameAI:
 
 # Example usage:
 if __name__ == '__main__':
-    game = SnakeGameAI()
+    obstacles = [(50, 50), (20, 20), (21, 20), (20, 21), (21, 21)]
+    game = SnakeGameAI(obstacles=obstacles)
     game.run_game()
