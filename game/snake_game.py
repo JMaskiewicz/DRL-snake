@@ -4,6 +4,13 @@ import random
 
 class SnakeGameAI:
     def __init__(self, model=None, obstacles=None, enemy_snake=None):
+        self.snake = None
+        self.direction = None
+        self.apple = None
+        self.score = None
+        self.done = None
+        self.obstacles = obstacles if obstacles is not None else []
+
         pygame.init()
         self.size = 64
         self.cell_size = 10
@@ -15,7 +22,6 @@ class SnakeGameAI:
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
 
-        self.obstacles = obstacles if obstacles is not None else []
         self.reset()
 
     def reset(self):
@@ -87,21 +93,32 @@ class SnakeGameAI:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.done = True
-                elif event.type == pygame.KEYDOWN:
+                    continue
+                if event.type == pygame.KEYDOWN and self.is_human:
                     if event.key == pygame.K_w and self.direction != (0, 1):  # Prevent reversing
                         self.direction = (0, -1)
-                    elif event.key == pygame.K_s and self.direction != (0, -1):  # Prevent reversing
+                    elif event.key == pygame.K_s and self.direction != (0, -1):
                         self.direction = (0, 1)
-                    elif event.key == pygame.K_a and self.direction != (1, 0):  # Prevent reversing
+                    elif event.key == pygame.K_a and self.direction != (1, 0):
                         self.direction = (-1, 0)
-                    elif event.key == pygame.K_d and self.direction != (-1, 0):  # Prevent reversing
+                    elif event.key == pygame.K_d and self.direction != (-1, 0):
                         self.direction = (1, 0)
-            else:
-                prediction = self.model.predict(self.get_state().reshape(1, -1))
-                self.step(np.argmax(prediction))
+
+            # AI control
+            if not self.is_human:
+                if self.model:
+                    prediction = self.model.predict(self.get_state().reshape(1, -1))
+                    self.step(np.argmax(prediction))
+                else:
+                    print("No AI model provided, switching to manual control.")
+                    self.is_human = True
+
+            # Move the snake based on current direction
+            if self.is_human:
+                self.step(self.direction_to_index(self.direction))
 
             self.render()
-            self.clock.tick(10)
+            self.clock.tick(10)  # Control the game speed
 
         pygame.quit()
         print(f"Game Over! Score: {self.score}")
