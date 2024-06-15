@@ -17,8 +17,8 @@ import pygame
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(DQN, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.fc2 = nn.Linear(256, 256)
+        self.fc1 = nn.Linear(input_dim, 512)
+        self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, output_dim)
 
     def forward(self, x):
@@ -27,21 +27,30 @@ class DQN(nn.Module):
         x = self.fc3(x)
         return x
 
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.buffer = deque(maxlen=capacity)
 
-    def push(self, state, action, reward, next_state, done):
+class ReplayBuffer:
+    def __init__(self, capacity, num_envs):
+        self.buffers = [deque(maxlen=capacity) for _ in range(num_envs)]
+
+    def push(self, env_index, state, action, reward, next_state, done):
         state = np.expand_dims(state, 0)
         next_state = np.expand_dims(next_state, 0)
-        self.buffer.append((state, action, reward, next_state, done))
+        self.buffers[env_index].append((state, action, reward, next_state, done))
 
-    def sample(self, batch_size):
-        state, action, reward, next_state, done = zip(*random.sample(self.buffer, batch_size))
+    def sample(self, batch_size, env_index=None):
+        if env_index is None:  # Sample uniformly from all environments
+            samples = [random.sample(buffer, min(len(buffer), batch_size // len(self.buffers))) for buffer in
+                       self.buffers]
+            samples = [item for sublist in samples for item in sublist]  # Flatten list
+        else:  # Sample from a specific environment
+            buffer = self.buffers[env_index]
+            samples = random.sample(buffer, min(len(buffer), batch_size))
+
+        state, action, reward, next_state, done = zip(*samples)
         return np.concatenate(state), action, reward, np.concatenate(next_state), done
 
     def __len__(self):
-        return len(self.buffer)
+        return sum(len(buffer) for buffer in self.buffers)
 
 def update_target(current_model, target_model):
     target_model.load_state_dict(current_model.state_dict())
@@ -67,37 +76,38 @@ def compute_loss(batch, current_model, target_model, gamma=0.99):
 
 def train(envs, current_model, target_model, optimizer, replay_buffer, epsilon, batch_size=1024, gamma=0.99):
     total_reward = 0
-    state = [env.reset() for env in envs]
-    state = np.stack(state)
-    done = [False for _ in envs]
+    states = [env.reset() for env in envs]
+    dones = [False] * len(envs)
 
-    while not all(done):
-        action = []
-        for s in state:
-            if random.random() > epsilon:
-                action.append(current_model(torch.FloatTensor(s).unsqueeze(0)).argmax(1).item())
+    while not all(dones):
+        actions = []
+        for idx, state in enumerate(states):
+            if dones[idx]:  # Skip action selection for finished games
+                actions.append(None)
             else:
-                action.append(random.randint(0, envs[0].action_space.n - 1))
+                if random.random() > epsilon:
+                    action = current_model(torch.FloatTensor(state).unsqueeze(0)).argmax(1).item()
+                else:
+                    action = random.randint(0, envs[idx].action_space.n - 1)
+                actions.append(action)
 
-        next_state, reward, done, _ = zip(*[env.step(a) for env, a in zip(envs, action)])
-        next_state = np.stack(next_state)
-        reward = np.stack(reward)
-        done = np.stack(done)
-
-        for s, a, r, ns, d in zip(state, action, reward, next_state, done):
-            replay_buffer.push(s, a, r, ns, d)
-
-        state = next_state
-        total_reward += reward.sum()
+        for idx, (env, action) in enumerate(zip(envs, actions)):
+            if not dones[idx]:
+                next_state, reward, done, _ = env.step(action)
+                replay_buffer.push(idx, states[idx], action, reward, next_state, done)
+                states[idx] = next_state  # Update state only if not done
+                total_reward += reward
+                dones[idx] = done  # Update done status
 
         if len(replay_buffer) > batch_size:
+            # Here you might want to control sampling across different games
             batch = replay_buffer.sample(batch_size)
             loss = compute_loss(batch, current_model, target_model, gamma)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-    return total_reward / len(envs)
+    return total_reward
 
 def play_with_model(model, env):
     state = env.reset()
@@ -114,10 +124,10 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 30  # Adjust number of episodes if necessary
-    replay_buffer = ReplayBuffer(100000)
+    num_episodes = 5000  # Adjust number of episodes if necessary
     envs = []
-    workers = 4
+    workers = 64
+    replay_buffer = ReplayBuffer(100000, workers)
 
     for _ in range(workers):  # Train with multiple environments
         random_number = random.randint(0, 62)
@@ -157,7 +167,11 @@ if __name__ == "__main__":
         if episode % 10 == 0:
             update_target(current_model, target_model)
 
-        epsilon = max(0.0, epsilon - epsilon_decay)
+        if episode % 100 == 0 and episode < 1000:
+            epsilon = max(0.0, epsilon - epsilon_decay)
+
+        if episode > 1000:
+            epsilon = epsilon * 0.99
 
     random_number = random.randint(0, 62)
     random_number_2 = random.randint(0, 62)
