@@ -1,16 +1,21 @@
 import pygame
 import numpy as np
 import random
+import gym
+from gym import spaces
 
-
-class SnakeGameAI:
-    def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1):
+class SnakeGameAI(gym.Env):
+    def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True):
+        super(SnakeGameAI, self).__init__()
         pygame.init()
         self.size = 64
         self.cell_size = 10
         self.width, self.height = self.size * self.cell_size, self.size * self.cell_size
-        self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption('Snake Game AI')
+        self.headless = headless
+
+        if not headless:
+            self.screen = pygame.display.set_mode((self.width, self.height))
+            pygame.display.set_caption('Snake Game AI')
 
         self.model = model  # AI model
         self.is_human = True if model is None else False
@@ -21,6 +26,9 @@ class SnakeGameAI:
         self.apple_count = apple_count  # Number of apples to spawn
         self.enemies = []  # Initialize enemies here
         self.apples = []  # Store apple positions
+
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(low=0, high=3, shape=(self.size * self.size,), dtype=np.int32)
 
         self.reset()
 
@@ -54,10 +62,7 @@ class SnakeGameAI:
         direction = random.choice(directions)
         new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
 
-        # Check if the new head is out of bounds or collides with itself or obstacles
-        if not (0 <= new_head[0] < self.size and 0 <= new_head[
-            1] < self.size) or new_head in enemy or new_head in self.obstacles:
-            # Choose another valid direction
+        if not (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size) or new_head in enemy or new_head in self.obstacles:
             valid_directions = [
                 (d[0], d[1]) for d in directions
                 if 0 <= enemy[0][0] + d[0] < self.size and 0 <= enemy[0][1] + d[1] < self.size
@@ -68,7 +73,6 @@ class SnakeGameAI:
                 direction = random.choice(valid_directions)
                 new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
             else:
-                # If no valid directions, keep the enemy in place
                 return
 
         enemy.insert(0, new_head)
@@ -106,7 +110,7 @@ class SnakeGameAI:
                 new_head in collision_objects):
             self.done = True
             reward = -10  # Punishment for dying
-            return self.get_state(), reward, self.done
+            return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
 
@@ -122,14 +126,15 @@ class SnakeGameAI:
         for enemy in self.enemies:
             self.move_enemy(enemy)
 
-        return self.get_state(), reward, self.done
+        return self.get_state(), reward, self.done, {}
 
     def direction_to_index(self, direction):
-        # Convert direction tuple to index for action
         direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
         return direction_map.get(direction, 0)
 
     def render(self):
+        if self.headless:
+            return
         self.screen.fill((0, 0, 0))
         for i, (x, y) in enumerate(self.snake):
             color = (0, 130, 0) if i == 0 else (0, 255, 0)  # Darker green for the head
@@ -180,6 +185,8 @@ class SnakeGameAI:
         pygame.quit()
         print(f"Game Over! Score: {self.score}")
 
+    def close(self):
+        pygame.quit()
 
 # Example usage:
 if __name__ == '__main__':
