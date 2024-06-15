@@ -13,6 +13,7 @@ import torch.nn as nn
 import torch.optim as optim
 from collections import deque
 import pygame
+from tqdm import tqdm
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -141,14 +142,14 @@ if __name__ == "__main__":
 
     current_model = DQN(envs[0].observation_space.shape[0], envs[0].action_space.n)
     target_model = DQN(envs[0].observation_space.shape[0], envs[0].action_space.n)
-    optimizer = optim.Adam(current_model.parameters())
+    optimizer = optim.Adam(current_model.parameters(), lr=0.0001)
 
     update_target(current_model, target_model)
 
     epsilon = 1.0  # Initial epsilon value
     epsilon_decay = 0.1  # Decay rate per episode
 
-    for episode in range(num_episodes):
+    for episode in tqdm(range(num_episodes)):
         envs = []
 
         for _ in range(workers):  # Train with multiple environments
