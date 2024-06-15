@@ -144,7 +144,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 200
+    num_episodes = 300
     workers = 256
     envs = []
 
