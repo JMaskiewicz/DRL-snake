@@ -104,7 +104,7 @@ def main():
     replay_buffer = ReplayBuffer(100000)
     envs = []
 
-    for _ in range(4):
+    for _ in range(1):
         random_number = random.randint(0, 62)
         random_number_2 = random.randint(0, 62)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),

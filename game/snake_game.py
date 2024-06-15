@@ -109,7 +109,7 @@ class SnakeGameAI(gym.Env):
                 new_head[1] < 0 or new_head[1] >= self.size or
                 new_head in collision_objects):
             self.done = True
-            reward = -10  # Punishment for dying
+            reward = -100  # Punishment for dying
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
