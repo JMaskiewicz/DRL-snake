@@ -12,6 +12,7 @@ class SnakeGameAI(gym.Env):
         self.cell_size = 10  # Size of each cell
         self.width, self.height = self.size * self.cell_size, self.size * self.cell_size
         self.headless = headless
+        self.move_log = []
 
         if not headless:  # If not headless, create a display window
             self.screen = pygame.display.set_mode((self.width, self.height))
@@ -124,11 +125,20 @@ class SnakeGameAI(gym.Env):
             self.snake.pop()
             reward = 0
 
-        if self.move_counter >= 400:  # Check if 400 moves have passed without scoring
+        if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
             self.done = True
-            reward = -1000  # Higher penalty for not scoring within 400 moves  #TODO change this to 1000
-            # print("TIMEOUT")
+            reward = -1000  # Higher penalty for not scoring within some number of moves  #TODO change this to 1000
+            # print("TIMEOUT")  # for debugging purposes
             return self.get_state(), reward, self.done, {}
+
+        move_data = {
+            "move_number": self.move_counter,
+            "action_taken": action,
+            "reward": reward,
+            "game_over": self.done,
+            "score": self.score
+        }
+        self.move_log.append(move_data)
 
         for enemy in self.enemies:
             self.move_enemy(enemy)
