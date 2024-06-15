@@ -126,7 +126,7 @@ class SnakeGameAI(gym.Env):
 
         if self.move_counter >= 400:  # Check if 400 moves have passed without scoring
             self.done = True
-            reward = -100  # Higher penalty for not scoring within 400 moves  #TODO change this to 1000
+            reward = -1000  # Higher penalty for not scoring within 400 moves  #TODO change this to 1000
             return self.get_state(), reward, self.done, {}
 
         for enemy in self.enemies:
