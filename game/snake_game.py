@@ -17,15 +17,15 @@ class SnakeGameAI(gym.Env):
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption('Snake Game AI')
 
-        self.model = model  # AI model
+        self.model = model
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
         self.obstacles = obstacles if obstacles is not None else []
-
-        self.enemy_count = enemy_count  # Number of enemy snakes
-        self.apple_count = apple_count  # Number of apples to spawn
-        self.enemies = []  # Initialize enemies here
-        self.apples = []  # Store apple positions
+        self.enemy_count = enemy_count
+        self.apple_count = apple_count
+        self.enemies = []
+        self.apples = []
+        self.move_counter = 0  # Counter to track moves without scoring
 
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=3, shape=(self.size * self.size,), dtype=np.int32)
@@ -35,10 +35,11 @@ class SnakeGameAI(gym.Env):
     def reset(self):
         self.snake = [(self.size // 2, self.size // 2)]
         self.direction = (0, -1)
-        self.apples = [self.spawn_apple() for _ in range(self.apple_count)]  # Spawn multiple apples
+        self.apples = [self.spawn_apple() for _ in range(self.apple_count)]
         self.score = 0
         self.done = False
         self.enemies = [self.spawn_enemy() for _ in range(self.enemy_count)]
+        self.move_counter = 0  # Reset move counter on game reset
         return self.get_state()
 
     def spawn_apple(self):
@@ -99,29 +100,34 @@ class SnakeGameAI(gym.Env):
         return state.flatten()
 
     def step(self, action):
-        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        self.direction = direction_map[action]
+        if self.done:
+            return self.get_state(), -1000, self.done, {}  # Ensure no further actions if game is already over
 
+        self.direction = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}[action]
         new_head = (self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1])
 
         collision_objects = self.snake + self.obstacles + [part for enemy in self.enemies for part in enemy]
-        if (new_head[0] < 0 or new_head[0] >= self.size or
-                new_head[1] < 0 or new_head[1] >= self.size or
-                new_head in collision_objects):
+        if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[1] >= self.size or new_head in collision_objects:
             self.done = True
             reward = -100  # Punishment for dying
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
+        self.move_counter += 1  # Increment move counter
 
-        # Check if new_head is in any apple positions
         if new_head in self.apples:
             self.score += 1
-            reward = 10  # Reward for eating apple
-            self.apples[self.apples.index(new_head)] = self.spawn_apple()  # Replace the eaten apple
+            self.move_counter = 0  # Reset move counter on scoring
+            reward = 10
+            self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
             reward = 0
+
+        if self.move_counter >= 200:  # Check if 200 moves have passed without scoring
+            self.done = True
+            reward = -1000  # Higher penalty for not scoring within 200 moves
+            return self.get_state(), reward, self.done, {}
 
         for enemy in self.enemies:
             self.move_enemy(enemy)

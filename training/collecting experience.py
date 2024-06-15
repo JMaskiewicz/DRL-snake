@@ -113,12 +113,13 @@ def play_with_model(model, env):
     env.close()
     print(f"Game Over! Score: {env.score}")
 
-def main():
-    num_episodes = 100  # Adjust number of episodes if necessary
+if __name__ == "__main__":
+    num_episodes = 30  # Adjust number of episodes if necessary
     replay_buffer = ReplayBuffer(100000)
     envs = []
+    workers = 4
 
-    for _ in range(16):  # Train with multiple environments
+    for _ in range(workers):  # Train with multiple environments
         random_number = random.randint(0, 62)
         random_number_2 = random.randint(0, 62)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
@@ -140,7 +141,7 @@ def main():
     for episode in range(num_episodes):
         envs = []
 
-        for _ in range(16):  # Train with multiple environments
+        for _ in range(workers):  # Train with multiple environments
             random_number = random.randint(0, 62)
             random_number_2 = random.randint(0, 62)
             obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
@@ -160,15 +161,15 @@ def main():
 
     random_number = random.randint(0, 62)
     random_number_2 = random.randint(0, 62)
-    obstacles = [(random_number, random_number_2), (random_number+1, random_number_2), (random_number, random_number_2+1), (random_number+1, random_number_2+1)]+\
-    [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
+    obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
+                 (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
+                [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
     env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
 
     # After training, play the game with the trained model
+    pygame.init()
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
     play_with_model(current_model, env_to_play)
-
-if __name__ == "__main__":
-    main()
 
 
 
