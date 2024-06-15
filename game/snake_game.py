@@ -8,12 +8,12 @@ class SnakeGameAI(gym.Env):
     def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True):
         super(SnakeGameAI, self).__init__()
         pygame.init()
-        self.size = 64
-        self.cell_size = 10
+        self.size = 64  # Size of the grid
+        self.cell_size = 10  # Size of each cell
         self.width, self.height = self.size * self.cell_size, self.size * self.cell_size
         self.headless = headless
 
-        if not headless:
+        if not headless:  # If not headless, create a display window
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption('Snake Game AI')
 
@@ -21,10 +21,10 @@ class SnakeGameAI(gym.Env):
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
         self.obstacles = obstacles if obstacles is not None else []
-        self.enemy_count = enemy_count
-        self.apple_count = apple_count
-        self.enemies = []
-        self.apples = []
+        self.enemy_count = enemy_count  # Number of enemies
+        self.apple_count = apple_count  # Number of apples
+        self.enemies = []  # List to store enemy positions
+        self.apples = []  # List to store apple positions
         self.move_counter = 0  # Counter to track moves without scoring
 
         self.action_space = spaces.Discrete(4)

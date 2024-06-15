@@ -100,7 +100,7 @@ def train(envs, current_model, target_model, optimizer, replay_buffer, epsilon, 
                 dones[idx] = done  # Update done status
 
         if len(replay_buffer) > batch_size:
-            # Here you might want to control sampling across different games
+            # TODO check how to do sampling from multiple environments
             batch = replay_buffer.sample(batch_size)
             loss = compute_loss(batch, current_model, target_model, gamma)
             optimizer.zero_grad()
@@ -124,7 +124,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 200  # Adjust number of episodes if necessary
+    num_episodes = 200  # Adjust number of episodes
     envs = []
     workers = 128
     replay_buffer = ReplayBuffer(100000, workers)
