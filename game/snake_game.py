@@ -194,5 +194,5 @@ if __name__ == '__main__':
     random_number_2 = random.randint(0, 62)
     obstacles = [(random_number, random_number_2), (random_number+1, random_number_2), (random_number, random_number_2+1), (random_number+1, random_number_2+1)]+\
     [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
-    game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2)
+    game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
     game.run_game()
