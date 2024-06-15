@@ -100,14 +100,14 @@ class SnakeGameAI(gym.Env):
         return state.flatten()
 
     def step(self, action):
-        if self.done:
-            return self.get_state(), -1000, self.done, {}  # Ensure no further actions if game is already over
+        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        self.direction = direction_map[action]  # Use the action as an index to get the direction
 
-        self.direction = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}[action]
         new_head = (self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1])
 
         collision_objects = self.snake + self.obstacles + [part for enemy in self.enemies for part in enemy]
-        if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[1] >= self.size or new_head in collision_objects:
+        if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
+            1] >= self.size or new_head in collision_objects:
             self.done = True
             reward = -100  # Punishment for dying
             return self.get_state(), reward, self.done, {}
