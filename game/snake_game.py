@@ -54,9 +54,22 @@ class SnakeGameAI:
         direction = random.choice(directions)
         new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
 
-        if not (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size) or new_head in enemy:
-            direction = (-direction[0], -direction[1])  # Reverse direction
-            new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
+        # Check if the new head is out of bounds or collides with itself or obstacles
+        if not (0 <= new_head[0] < self.size and 0 <= new_head[
+            1] < self.size) or new_head in enemy or new_head in self.obstacles:
+            # Choose another valid direction
+            valid_directions = [
+                (d[0], d[1]) for d in directions
+                if 0 <= enemy[0][0] + d[0] < self.size and 0 <= enemy[0][1] + d[1] < self.size
+                   and (enemy[0][0] + d[0], enemy[0][1] + d[1]) not in enemy and (
+                   enemy[0][0] + d[0], enemy[0][1] + d[1]) not in self.obstacles
+            ]
+            if valid_directions:
+                direction = random.choice(valid_directions)
+                new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
+            else:
+                # If no valid directions, keep the enemy in place
+                return
 
         enemy.insert(0, new_head)
         if new_head in self.apples:
@@ -118,8 +131,9 @@ class SnakeGameAI:
 
     def render(self):
         self.screen.fill((0, 0, 0))
-        for x, y in self.snake:
-            pygame.draw.rect(self.screen, (0, 255, 0),
+        for i, (x, y) in enumerate(self.snake):
+            color = (0, 130, 0) if i == 0 else (0, 255, 0)  # Darker green for the head
+            pygame.draw.rect(self.screen, color,
                              (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
         for apple in self.apples:
             pygame.draw.rect(self.screen, (255, 0, 0),
@@ -169,6 +183,9 @@ class SnakeGameAI:
 
 # Example usage:
 if __name__ == '__main__':
-    obstacles = [(50, 50), (20, 20), (21, 20), (20, 21), (21, 21)]
+    random_number = random.randint(0, 62)
+    random_number_2 = random.randint(0, 62)
+    obstacles = [(random_number, random_number_2), (random_number+1, random_number_2), (random_number, random_number_2+1), (random_number+1, random_number_2+1)]+\
+    [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
     game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2)
     game.run_game()
