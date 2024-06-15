@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import deque
+import pygame
 
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -64,8 +65,7 @@ def compute_loss(batch, current_model, target_model, gamma=0.99):
     loss = (q_value - expected_q_value.detach()).pow(2).mean()
     return loss
 
-
-def train(envs, current_model, target_model, optimizer, replay_buffer, epsilon, batch_size=32, gamma=0.99):
+def train(envs, current_model, target_model, optimizer, replay_buffer, epsilon, batch_size=1024, gamma=0.99):
     total_reward = 0
     state = [env.reset() for env in envs]
     state = np.stack(state)
@@ -99,12 +99,26 @@ def train(envs, current_model, target_model, optimizer, replay_buffer, epsilon, 
 
     return total_reward / len(envs)
 
+def play_with_model(model, env):
+    state = env.reset()
+    done = False
+
+    while not done:
+        action = model(torch.FloatTensor(state).unsqueeze(0)).argmax(1).item()
+        next_state, reward, done, _ = env.step(action)
+        state = next_state
+        env.render()
+        pygame.time.wait(100)  # Adjust delay to control speed
+
+    env.close()
+    print(f"Game Over! Score: {env.score}")
+
 def main():
     num_episodes = 100  # Adjust number of episodes if necessary
     replay_buffer = ReplayBuffer(100000)
     envs = []
 
-    for _ in range(1):
+    for _ in range(16):  # Train with multiple environments
         random_number = random.randint(0, 62)
         random_number_2 = random.randint(0, 62)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
@@ -124,14 +138,34 @@ def main():
     epsilon_decay = 0.1  # Decay rate per episode
 
     for episode in range(num_episodes):
+        envs = []
+
+        for _ in range(16):  # Train with multiple environments
+            random_number = random.randint(0, 62)
+            random_number_2 = random.randint(0, 62)
+            obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
+                         (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
+                        [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
+            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 3), apple_count=random.randint(1, 3),
+                              headless=True)
+            envs.append(env)
+
         reward = train(envs, current_model, target_model, optimizer, replay_buffer, epsilon)
         print(f"Episode {episode}, Reward: {reward}")
 
         if episode % 10 == 0:
             update_target(current_model, target_model)
 
-        # Decay epsilon
         epsilon = max(0.0, epsilon - epsilon_decay)
+
+    random_number = random.randint(0, 62)
+    random_number_2 = random.randint(0, 62)
+    obstacles = [(random_number, random_number_2), (random_number+1, random_number_2), (random_number, random_number_2+1), (random_number+1, random_number_2+1)]+\
+    [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
+
+    # After training, play the game with the trained model
+    play_with_model(current_model, env_to_play)
 
 if __name__ == "__main__":
     main()
