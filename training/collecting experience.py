@@ -5,7 +5,6 @@ DDQN - Collecting Experience
 
 from game.snake_game import SnakeGameAI
 
-from game.snake_game import SnakeGameAI
 import numpy as np
 import random
 import torch
@@ -52,14 +51,9 @@ class ReplayBuffer:
         next_state = np.expand_dims(next_state, 0)
         self.buffers[env_index].append((state, action, reward, next_state, done))
 
-    def sample(self, batch_size, env_index=None):
-        if env_index is None:
-            samples = [random.sample(buffer, min(len(buffer), batch_size // len(self.buffers))) for buffer in self.buffers]
-            samples = [item for sublist in samples for item in sublist]
-        else:
-            buffer = self.buffers[env_index]
-            samples = random.sample(buffer, min(len(buffer), batch_size))
-
+    def sample(self, batch_size):
+        buffer = random.choice(self.buffers)
+        samples = random.sample(buffer, min(len(buffer), batch_size))
         state, action, reward, next_state, done = zip(*samples)
         return np.concatenate(state), action, reward, np.concatenate(next_state), done
 
@@ -129,8 +123,8 @@ class AgentDDQN:
         loss = (q_value - expected_q_value.detach()).pow(2).mean()
         return loss
 
-    def update_epsilon(self, decay=0.05):
-        self.epsilon = max(0.0, self.epsilon - decay)
+    def update_epsilon(self, episode, max_episodes):
+        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 2))
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
@@ -150,7 +144,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 5
+    num_episodes = 200
     workers = 256
     envs = []
 
@@ -178,8 +172,7 @@ if __name__ == "__main__":
         if episode % 10 == 0:
             agent.update_target_network()
 
-        if episode % 20 == 0:
-            agent.update_epsilon()
+        agent.update_epsilon(episode, num_episodes)
 
     plt.figure(figsize=(10, 5))
     plt.plot(rewards, label='Reward per Episode')
@@ -197,7 +190,9 @@ if __name__ == "__main__":
                 [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
     env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
 
+    # After training, play the game with the trained model
     pygame.init()
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
     play_with_model(agent.current_model, env_to_play)
 
 
