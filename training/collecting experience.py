@@ -124,9 +124,9 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 5000  # Adjust number of episodes if necessary
+    num_episodes = 200  # Adjust number of episodes if necessary
     envs = []
-    workers = 64
+    workers = 128
     replay_buffer = ReplayBuffer(100000, workers)
 
     for _ in range(workers):  # Train with multiple environments
@@ -167,11 +167,8 @@ if __name__ == "__main__":
         if episode % 10 == 0:
             update_target(current_model, target_model)
 
-        if episode % 100 == 0 and episode < 1000:
+        if episode % 10 == 0:
             epsilon = max(0.0, epsilon - epsilon_decay)
-
-        if episode > 1000:
-            epsilon = epsilon * 0.99
 
     random_number = random.randint(0, 62)
     random_number_2 = random.randint(0, 62)
