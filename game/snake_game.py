@@ -85,12 +85,16 @@ class SnakeGameAI(gym.Env):
 
     def get_state(self):
         state = np.zeros((self.size, self.size), dtype=int)
-        for s in self.snake:
-            if 0 <= s[0] < self.size and 0 <= s[1] < self.size:
-                state[s] = 1
-        for apple in self.apples:  # Multiple apples
+        if self.snake:
+            head = self.snake[0]
+            if 0 <= head[0] < self.size and 0 <= head[1] < self.size:
+                state[head] = 1  # Unique value for the snake's head
+            for s in self.snake[1:]:
+                if 0 <= s[0] < self.size and 0 <= s[1] < self.size:
+                    state[s] = 2  # Snake's body
+        for apple in self.apples:
             if 0 <= apple[0] < self.size and 0 <= apple[1] < self.size:
-                state[apple] = 2
+                state[apple] = 3
         for obs in self.obstacles:
             if 0 <= obs[0] < self.size and 0 <= obs[1] < self.size:
                 state[obs] = -1
