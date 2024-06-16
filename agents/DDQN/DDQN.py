@@ -129,7 +129,7 @@ class AgentDDQN:
         return loss
 
     def update_epsilon(self, episode, max_episodes):
-        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 2))
+        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 1.5))
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
@@ -149,8 +149,8 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 300
-    workers = 32
+    num_episodes = 800
+    workers = 128
     envs = []
 
     for _ in range(workers):

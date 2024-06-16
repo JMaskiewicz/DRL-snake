@@ -110,7 +110,7 @@ class SnakeGameAI(gym.Env):
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
             self.done = True
-            reward = -100  # Punishment for dying
+            reward = -500  # Punishment for dying
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
@@ -119,7 +119,7 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0  # Reset move counter on scoring
-            reward = 10
+            reward = 100
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
