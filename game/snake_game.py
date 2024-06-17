@@ -5,10 +5,10 @@ import gym
 from gym import spaces
 
 class SnakeGameAI(gym.Env):
-    def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True):
+    def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True, size=64):
         super(SnakeGameAI, self).__init__()
         pygame.init()
-        self.size = 64  # Size of the grid
+        self.size = size  # Size of the grid
         self.cell_size = 10  # Size of each cell
         self.width, self.height = self.size * self.cell_size, self.size * self.cell_size
         self.headless = headless
@@ -62,7 +62,7 @@ class SnakeGameAI(gym.Env):
     def move_enemy(self, enemy):
         directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
         direction = random.choice(directions)
-        new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
+        new_head = (enemy[0 ][0] + direction[0], enemy[0][1] + direction[1])
 
         if not (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size) or new_head in enemy or new_head in self.obstacles:
             valid_directions = [
@@ -114,7 +114,7 @@ class SnakeGameAI(gym.Env):
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
             self.done = True
-            reward = -500  # Punishment for dying
+            reward = -100  # Punishment for dying
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
@@ -131,7 +131,7 @@ class SnakeGameAI(gym.Env):
 
         if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
             self.done = True
-            reward = -1000  # Higher penalty for not scoring within some number of moves  #TODO change this to 1000
+            reward = -100  # Higher penalty for not scoring within some number of moves  #TODO change this to 1000
             # print("TIMEOUT")  # for debugging purposes
             return self.get_state(), reward, self.done, {}
 
@@ -211,9 +211,11 @@ class SnakeGameAI(gym.Env):
 
 # Example usage:
 if __name__ == '__main__':
-    random_number = random.randint(0, 62)
-    random_number_2 = random.randint(0, 62)
-    obstacles = [(random_number, random_number_2), (random_number+1, random_number_2), (random_number, random_number_2+1), (random_number+1, random_number_2+1)]+\
-    [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
-    game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)  # Set headless to False to render and play as human
+    size = 32
+    random_number = random.randint(0, size - 2)
+    random_number_2 = random.randint(0, size - 2)
+    obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
+                 (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
+                [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, 5))]
+    game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False, size=size)  # Set headless to False to render and play as human
     game.run_game()

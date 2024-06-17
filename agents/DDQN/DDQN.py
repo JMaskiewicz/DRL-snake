@@ -43,29 +43,27 @@ class DuelingQNetwork(nn.Module):
         return q_values
 
 class ReplayBuffer:
-    def __init__(self, capacity, num_envs):
-        self.buffers = [deque(maxlen=capacity) for _ in range(num_envs)]
+    def __init__(self, capacity):
+        self.buffer = deque(maxlen=capacity)
 
-    def push(self, env_index, state, action, reward, next_state, done):
+    def push(self, state, action, reward, next_state, done):
         state = np.expand_dims(state, 0)
         next_state = np.expand_dims(next_state, 0)
-        self.buffers[env_index].append((state, action, reward, next_state, done))
+        self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
-        buffer = random.choice(self.buffers)
-        samples = random.sample(buffer, min(len(buffer), batch_size))
+        samples = random.sample(self.buffer, min(len(self.buffer), batch_size))
         state, action, reward, next_state, done = zip(*samples)
         return np.concatenate(state), action, reward, np.concatenate(next_state), done
 
     def __len__(self):
-        return sum(len(buffer) for buffer in self.buffers)
+        return len(self.buffer)
 
     def clear(self):
-        for buffer in self.buffers:
-            buffer.clear()
+        self.buffer.clear()
 
 class AgentDDQN:
-    def __init__(self, input_dims, n_actions, num_envs, learning_rate=0.0001):
+    def __init__(self, input_dims, n_actions, num_envs, learning_rate=0.00025):
         self.current_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model.load_state_dict(self.current_model.state_dict())
@@ -73,7 +71,7 @@ class AgentDDQN:
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
         self.replay_buffer = ReplayBuffer(100000, num_envs)
         self.epsilon = 1.0
-        self.gamma = 0.99
+        self.gamma = 0.999
 
     def select_action(self, state, env):
         if random.random() > self.epsilon:
@@ -83,56 +81,78 @@ class AgentDDQN:
             action = random.randint(0, env.action_space.n - 1)
         return action
 
-    def train(self, envs, batch_size=1024):
-        states = [env.reset() for env in envs]
-        dones = [False] * len(envs)
-        total_reward = 0
+    class AgentDDQN:
+        def __init__(self, input_dims, n_actions, learning_rate=0.00025):
+            self.current_model = DuelingQNetwork(input_dims, n_actions)
+            self.target_model = DuelingQNetwork(input_dims, n_actions)
+            self.target_model.load_state_dict(self.current_model.state_dict())
+            self.target_model.eval()
+            self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
+            self.replay_buffer = ReplayBuffer(100000)
+            self.epsilon = 1.0
+            self.gamma = 0.999
 
-        while not all(dones):
-            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in range(len(envs))]
+        def select_action(self, state, env):
+            if random.random() > self.epsilon:
+                state = torch.FloatTensor(state).unsqueeze(0)
+                action = self.current_model(state).argmax(1).item()
+            else:
+                action = random.randint(0, env.action_space.n - 1)
+            return action
 
-            for idx, env in enumerate(envs):
-                if not dones[idx]:
-                    next_state, reward, done, _ = env.step(actions[idx])
-                    self.replay_buffer.push(idx, states[idx], actions[idx], reward, next_state, done)
-                    states[idx] = next_state
-                    total_reward += reward
-                    dones[idx] = done
+        def train(self, envs, batch_size=8192):
+            print("Training")
+            states = [env.reset() for env in envs]
+            dones = [False] * len(envs)
+            total_reward = 0
 
-            if len(self.replay_buffer) > batch_size:
-                batch = self.replay_buffer.sample(batch_size)
-                loss = self.compute_loss(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+            while not all(dones):
+                actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+                           range(len(envs))]
 
-        self.replay_buffer.clear()
-        return total_reward
+                for idx, env in enumerate(envs):
+                    if not dones[idx]:
+                        next_state, reward, done, _ = env.step(actions[idx])
+                        self.replay_buffer.push(states[idx], actions[idx], reward, next_state, done)
+                        states[idx] = next_state
+                        total_reward += reward
+                        dones[idx] = done
 
-    def compute_loss(self, batch):
-        states, actions, rewards, next_states, dones = batch
-        states = torch.FloatTensor(states)
-        next_states = torch.FloatTensor(next_states)
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        dones = torch.FloatTensor(dones)
+                if len(self.replay_buffer) > batch_size:
+                    batch = self.replay_buffer.sample(batch_size)
+                    loss = self.compute_loss(batch)
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
 
-        q_values = self.current_model(states)
-        next_q_values = self.current_model(next_states)
-        next_q_state_values = self.target_model(next_states)
+            self.replay_buffer.clear()
+            return total_reward
 
-        q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-        next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
-        expected_q_value = rewards + self.gamma * next_q_value * (1 - dones)
+        def compute_loss(self, batch):
+            states, actions, rewards, next_states, dones = batch
+            states = torch.FloatTensor(states)
+            next_states = torch.FloatTensor(next_states)
+            actions = torch.LongTensor(actions)
+            rewards = torch.FloatTensor(rewards)
+            dones = torch.FloatTensor(dones)
 
-        loss = (q_value - expected_q_value.detach()).pow(2).mean()
-        return loss
+            q_values = self.current_model(states)
+            next_q_values = self.current_model(next_states)
+            next_q_state_values = self.target_model(next_states)
 
-    def update_epsilon(self, episode, max_episodes):
-        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 1.5))
+            q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+            next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
+            expected_q_value = rewards + self.gamma * next_q_value * (1 - dones)
 
-    def update_target_network(self):
-        self.target_model.load_state_dict(self.current_model.state_dict())
+            loss = (q_value - expected_q_value.detach()).pow(2).mean()
+            return loss
+
+        def update_epsilon(self, episode, max_episodes):
+            self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 1.5))
+
+        def update_target_network(self):
+            self.target_model.load_state_dict(self.current_model.state_dict())
+
 
 def play_with_model(model, env):
     state = env.reset()
@@ -149,18 +169,20 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 800
-    workers = 128
+    num_episodes = 5000
+    workers = 32
     envs = []
+    size = 20
+    obstacle_number = 0
 
     for _ in range(workers):
-        random_number = random.randint(0, 62)
-        random_number_2 = random.randint(0, 62)
+        random_number = random.randint(0, size-2)
+        random_number_2 = random.randint(0, size-2)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                    [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 3), apple_count=random.randint(1, 3),
-                          headless=True)
+                    [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 2),
+                          headless=True, size=size)
         envs.append(env)
 
     input_dims = envs[0].observation_space.shape[0]
@@ -188,16 +210,16 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.show()
 
-    random_number = random.randint(0, 62)
-    random_number_2 = random.randint(0, 62)
+    random_number = random.randint(0, size - 2)
+    random_number_2 = random.randint(0, size - 2)
     obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                  (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                [(random.randint(0, 63), random.randint(0, 63)) for _ in range(random.randint(0, 20))]
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
+                [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False, size=size)
 
     # After training, play the game with the trained model
     pygame.init()
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False)
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False, size=size)
     play_with_model(agent.current_model, env_to_play)
 
 
