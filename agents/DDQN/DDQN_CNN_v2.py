@@ -1,8 +1,3 @@
-"""
-DDQN - Collecting Experience
-
-"""
-
 from game.snake_game import SnakeGameAI
 
 import numpy as np
@@ -17,7 +12,7 @@ import matplotlib.pyplot as plt
 
 
 class DuelingQNetworkCNN(nn.Module):
-    def __init__(self, input_channels, n_actions, dropout_rate=0.2, input_size=20):
+    def __init__(self, input_channels, n_actions, dropout_rate=0.2, input_size=64):
         super(DuelingQNetworkCNN, self).__init__()
         self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=5, stride=2, padding=2)
         self.dropout1 = nn.Dropout(dropout_rate)
@@ -62,19 +57,18 @@ class DuelingQNetworkCNN(nn.Module):
         x = self.dropout3(x)
         return x
 
+
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
 
     def push(self, state, action, reward, next_state, done):
-        state = np.expand_dims(state, 0)
-        next_state = np.expand_dims(next_state, 0)
         self.buffer.append((state, action, reward, next_state, done))
 
     def sample(self, batch_size):
         samples = random.sample(self.buffer, min(len(self.buffer), batch_size))
         state, action, reward, next_state, done = zip(*samples)
-        return np.concatenate(state), action, reward, np.concatenate(next_state), done
+        return np.array(state), action, reward, np.array(next_state), done
 
     def __len__(self):
         return len(self.buffer)
@@ -82,8 +76,10 @@ class ReplayBuffer:
     def clear(self):
         self.buffer.clear()
 
+
 class AgentDDQN:
-    def __init__(self, input_dims, n_actions, learning_rate=0.005, env_size=20, input_size=20, batch_size=1024, epsilon_decay=0.995):
+    def __init__(self, input_dims, n_actions, learning_rate=0.005, env_size=64, input_size=64, batch_size=1024,
+                 epsilon_decay=0.995):
         self.env_size = env_size
         self.current_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
         self.target_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
@@ -95,6 +91,7 @@ class AgentDDQN:
         self.gamma = 0.75
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
+        self.losses = []
 
     def select_action(self, state, env):
         if random.random() > self.epsilon:
@@ -111,7 +108,8 @@ class AgentDDQN:
         total_reward = 0
 
         while not all(dones):
-            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in range(len(envs))]
+            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+                       range(len(envs))]
 
             for idx, env in enumerate(envs):
                 if not dones[idx]:
@@ -131,14 +129,24 @@ class AgentDDQN:
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.losses.append(loss.item())
         print(f"Loss: {loss.item()}")
         self.replay_buffer.clear()
         return total_reward
 
     def compute_loss(self, batch):
         states, actions, rewards, next_states, dones = batch
+
+        # Debugging print statements to check shapes
+        # print(f"States shape before reshape: {states.shape}")
+        # print(f"Next_states shape before reshape: {next_states.shape}")
+
         states = torch.FloatTensor(states).view(-1, 1, self.env_size, self.env_size)
         next_states = torch.FloatTensor(next_states).view(-1, 1, self.env_size, self.env_size)
+
+        # print(f"States shape after reshape: {states.shape}")
+        # print(f"Next_states shape after reshape: {next_states.shape}")
+
         actions = torch.LongTensor(actions)
         rewards = torch.FloatTensor(rewards)
         dones = torch.FloatTensor(dones)
@@ -176,26 +184,28 @@ def play_with_model(model, env):
     env.close()
     print(f"Game Over! Score: {env.score}")
 
+
 if __name__ == "__main__":
-    num_episodes = 10000
-    workers = 16
+    num_episodes = 100
+    workers = 8
     envs = []
     size = 64
     obstacle_number = 5
 
     for _ in range(workers):
-        random_number = random.randint(0, size-2)
-        random_number_2 = random.randint(0, size-2)
+        random_number = random.randint(0, size - 2)
+        random_number_2 = random.randint(0, size - 2)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                    [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 1), apple_count=random.randint(1, 2),
+                    [(random.randint(0, size), random.randint(0, size)) for _ in
+                     range(random.randint(0, obstacle_number))]
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 2), apple_count=random.randint(1, 5),
                           headless=True, size=size)
         envs.append(env)
 
     input_dims = envs[0].observation_space.shape[0]
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=1024, learning_rate=0.0033, epsilon_decay=0.999)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128, learning_rate=0.0025, epsilon_decay=0.99)
 
     rewards = []
 
@@ -218,6 +228,15 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.show()
 
+    plt.figure(figsize=(10, 5))
+    plt.plot(agent.losses, label='Loss per Episode')
+    plt.xlabel('Episode')
+    plt.ylabel('Loss')
+    plt.title('Loss per Episode over Training')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
     random_number = random.randint(0, size - 2)
     random_number_2 = random.randint(0, size - 2)
     obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
@@ -230,5 +249,3 @@ if __name__ == "__main__":
     pygame.init()
     env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=2, headless=False, size=size)
     play_with_model(agent.current_model, env_to_play)
-
-
