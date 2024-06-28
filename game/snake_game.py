@@ -110,6 +110,9 @@ class SnakeGameAI(gym.Env):
             for part in enemy:
                 if 0 <= part[0] < self.size and 0 <= part[1] < self.size:
                     state[part] = -2
+
+        # Normalize state
+        state = (state + 2) / 5.0  # Normalize to range [0, 1]
         return state.flatten()
 
     def step(self, action):

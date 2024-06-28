@@ -121,6 +121,10 @@ class AgentDDQN:
                     total_reward += reward
                     dones[idx] = done
 
+        if len(self.replay_buffer) < self.batch_size:
+            print("Not enough samples in the replay buffer to sample a batch.")
+            return total_reward
+
         # learn after each episode
         batch = self.replay_buffer.sample(self.batch_size)
         loss = self.compute_loss(batch)
