@@ -98,8 +98,7 @@ class AgentDDQN:
 
     def select_action(self, state, env):
         if random.random() > self.epsilon:
-            state = torch.FloatTensor(state).view(1, 1, env.size,
-                                                  env.size)  # Reshape to (batch_size, channels, height, width)
+            state = torch.FloatTensor(state).view(1, 1, env.size, env.size)
             action = self.current_model(state).argmax(1).item()
         else:
             action = random.randint(0, env.action_space.n - 1)
