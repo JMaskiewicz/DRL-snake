@@ -135,7 +135,7 @@ class SnakeGameAI(gym.Env):
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = -1  # Small penalty for each move
+            reward = -0.1  # Small penalty for each move
 
         if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
             self.done = True
@@ -146,6 +146,7 @@ class SnakeGameAI(gym.Env):
             self.move_enemy(enemy)
 
         return self.get_state(), reward, self.done, {}
+
     def direction_to_index(self, direction):
         direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
         return direction_map.get(direction, 0)

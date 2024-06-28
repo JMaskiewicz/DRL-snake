@@ -111,8 +111,7 @@ class AgentDDQN:
         total_reward = 0
 
         while not all(dones):
-            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
-                       range(len(envs))]
+            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in range(len(envs))]
 
             for idx, env in enumerate(envs):
                 if not dones[idx]:
@@ -122,13 +121,13 @@ class AgentDDQN:
                     total_reward += reward
                     dones[idx] = done
 
-            if len(self.replay_buffer) > self.batch_size:
-                batch = self.replay_buffer.sample(self.batch_size)
-                loss = self.compute_loss(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
+        # learn after each episode
+        batch = self.replay_buffer.sample(self.batch_size)
+        loss = self.compute_loss(batch)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        print(f"Loss: {loss.item()}")
         self.replay_buffer.clear()
         return total_reward
 
@@ -174,7 +173,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 5000
+    num_episodes = 10000
     workers = 1
     envs = []
     size = 20
@@ -192,7 +191,7 @@ if __name__ == "__main__":
 
     input_dims = envs[0].observation_space.shape[0]
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=1024, learning_rate=0.001, epsilon_decay=0.99)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128, learning_rate=0.0025, epsilon_decay=0.99)
 
     rewards = []
 
