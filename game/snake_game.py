@@ -21,12 +21,19 @@ class SnakeGameAI(gym.Env):
         self.model = model
         self.is_human = True if model is None else False
         self.clock = pygame.time.Clock()
-        self.obstacles = obstacles if obstacles is not None else []
         self.enemy_count = enemy_count  # Number of enemies
         self.apple_count = apple_count  # Number of apples
         self.enemies = []  # List to store enemy positions
         self.apples = []  # List to store apple positions
         self.move_counter = 0  # Counter to track moves without scoring
+
+        # Initialize obstacles with borders included
+        self.border_obstacles = [(i, 0) for i in range(self.size)] + \
+                         [(i, self.size - 1) for i in range(self.size)] + \
+                         [(0, j) for j in range(self.size)] + \
+                         [(self.size - 1, j) for j in range(self.size)]
+        self.custom_obstacles = obstacles if obstacles is not None else []
+        self.obstacles = self.border_obstacles + self.custom_obstacles
 
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=3, shape=(self.size * self.size,), dtype=np.int32)
@@ -41,6 +48,7 @@ class SnakeGameAI(gym.Env):
         self.done = False
         self.enemies = [self.spawn_enemy() for _ in range(self.enemy_count)]
         self.move_counter = 0  # Reset move counter on game reset
+
         return self.get_state()
 
     def spawn_apple(self):
@@ -62,7 +70,7 @@ class SnakeGameAI(gym.Env):
     def move_enemy(self, enemy):
         directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
         direction = random.choice(directions)
-        new_head = (enemy[0 ][0] + direction[0], enemy[0][1] + direction[1])
+        new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
 
         if not (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size) or new_head in enemy or new_head in self.obstacles:
             valid_directions = [
@@ -131,8 +139,7 @@ class SnakeGameAI(gym.Env):
 
         if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
             self.done = True
-            reward = -1000  # Higher penalty for not scoring within some number of moves  #TODO change this to 1000
-            # print("TIMEOUT")  # for debugging purposes
+            reward = -1000  # Higher penalty for not scoring within some number of moves
             return self.get_state(), reward, self.done, {}
 
         move_data = {
@@ -211,7 +218,7 @@ class SnakeGameAI(gym.Env):
 
 # Example usage:
 if __name__ == '__main__':
-    size = 32
+    size = 64
     random_number = random.randint(0, size - 2)
     random_number_2 = random.randint(0, size - 2)
     obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),

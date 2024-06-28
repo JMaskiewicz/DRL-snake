@@ -19,14 +19,13 @@ import matplotlib.pyplot as plt
 class DuelingQNetworkCNN(nn.Module):
     def __init__(self, input_channels, n_actions, dropout_rate=0.2, input_size=20):
         super(DuelingQNetworkCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=5, stride=2, padding=2)  # Added padding
+        self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=5, stride=2, padding=2)
         self.dropout1 = nn.Dropout(dropout_rate)
-        self.conv2 = nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2)  # Added padding
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=5, stride=2, padding=2)
         self.dropout2 = nn.Dropout(dropout_rate)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)  # Added padding
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
         self.dropout3 = nn.Dropout(dropout_rate)
-        # Calculate the output size after conv layers to set the input size for fc1 correctly
-        conv_output_size = self._get_conv_output((1, 1, 20, 20))  # assuming input size is 20x20
+        conv_output_size = self._get_conv_output((1, input_channels, input_size, input_size))
         self.fc1 = nn.Linear(conv_output_size, 512)
         self.dropout4 = nn.Dropout(dropout_rate)
         self.fc_value = nn.Linear(512, 1)
@@ -42,15 +41,12 @@ class DuelingQNetworkCNN(nn.Module):
         x = x.view(x.size(0), -1)
         x = torch.relu(self.fc1(x))
         x = self.dropout4(x)
-
         val = self.fc_value(x)
         adv = self.fc_advantage(x)
-
         q_values = val + (adv - adv.mean(dim=1, keepdim=True))
         return q_values
 
     def _get_conv_output(self, shape):
-        # Helper function to calculate the size of the output from the conv layers
         with torch.no_grad():
             input = torch.autograd.Variable(torch.rand(*shape))
             output_feat = self._forward_features(input)
@@ -87,7 +83,7 @@ class ReplayBuffer:
         self.buffer.clear()
 
 class AgentDDQN:
-    def __init__(self, input_dims, n_actions, learning_rate=0.00025, env_size=20, input_size=20):
+    def __init__(self, input_dims, n_actions, learning_rate=0.00025, env_size=20, input_size=20, batch_size=64):
         self.env_size = env_size
         self.current_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
         self.target_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
@@ -96,7 +92,8 @@ class AgentDDQN:
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
         self.replay_buffer = ReplayBuffer(100000)
         self.epsilon = 1.0
-        self.gamma = 0.95
+        self.gamma = 0.75
+        self.batch_size = batch_size
 
     def select_action(self, state, env):
         if random.random() > self.epsilon:
@@ -107,7 +104,7 @@ class AgentDDQN:
             action = random.randint(0, env.action_space.n - 1)
         return action
 
-    def train(self, envs, batch_size=2048):
+    def train(self, envs):
         print("Training")
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
@@ -125,8 +122,8 @@ class AgentDDQN:
                     total_reward += reward
                     dones[idx] = done
 
-            if len(self.replay_buffer) > batch_size:
-                batch = self.replay_buffer.sample(batch_size)
+            if len(self.replay_buffer) > self.batch_size:
+                batch = self.replay_buffer.sample(self.batch_size)
                 loss = self.compute_loss(batch)
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -180,7 +177,7 @@ def play_with_model(model, env):
 
 if __name__ == "__main__":
     num_episodes = 1000
-    workers = 32
+    workers = 1
     envs = []
     size = 20
     obstacle_number = 0
@@ -191,13 +188,13 @@ if __name__ == "__main__":
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 2),
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 1), apple_count=random.randint(1, 2),
                           headless=True, size=size)
         envs.append(env)
 
     input_dims = envs[0].observation_space.shape[0]
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128)
 
     rewards = []
 
@@ -225,7 +222,8 @@ if __name__ == "__main__":
     obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                  (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                 [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=2, headless=False, size=size)
+
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=0, apple_count=2, headless=False, size=size)
 
     # After training, play the game with the trained model
     pygame.init()
