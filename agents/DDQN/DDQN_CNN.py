@@ -83,7 +83,7 @@ class ReplayBuffer:
         self.buffer.clear()
 
 class AgentDDQN:
-    def __init__(self, input_dims, n_actions, learning_rate=0.00025, env_size=20, input_size=20, batch_size=64):
+    def __init__(self, input_dims, n_actions, learning_rate=0.005, env_size=20, input_size=20, batch_size=1024, epsilon_decay=0.995):
         self.env_size = env_size
         self.current_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
         self.target_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
@@ -93,6 +93,7 @@ class AgentDDQN:
         self.replay_buffer = ReplayBuffer(100000)
         self.epsilon = 1.0
         self.gamma = 0.75
+        self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
 
     def select_action(self, state, env):
@@ -134,10 +135,8 @@ class AgentDDQN:
 
     def compute_loss(self, batch):
         states, actions, rewards, next_states, dones = batch
-        states = torch.FloatTensor(states).view(-1, 1, self.env_size,
-                                                self.env_size)  # Reshape to (batch_size, channels, height, width)
-        next_states = torch.FloatTensor(next_states).view(-1, 1, self.env_size,
-                                                          self.env_size)  # Reshape to (batch_size, channels, height, width)
+        states = torch.FloatTensor(states).view(-1, 1, self.env_size, self.env_size)
+        next_states = torch.FloatTensor(next_states).view(-1, 1, self.env_size, self.env_size)
         actions = torch.LongTensor(actions)
         rewards = torch.FloatTensor(rewards)
         dones = torch.FloatTensor(dones)
@@ -153,8 +152,8 @@ class AgentDDQN:
         loss = (q_value - expected_q_value.detach()).pow(2).mean()
         return loss
 
-    def update_epsilon(self, episode, max_episodes):
-        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 1.5))
+    def update_epsilon(self):
+        self.epsilon = self.epsilon * self.epsilon_decay
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
@@ -176,7 +175,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 1000
+    num_episodes = 5000
     workers = 1
     envs = []
     size = 20
@@ -194,7 +193,7 @@ if __name__ == "__main__":
 
     input_dims = envs[0].observation_space.shape[0]
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=1024, learning_rate=0.001, epsilon_decay=0.99)
 
     rewards = []
 
@@ -203,10 +202,10 @@ if __name__ == "__main__":
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
-        if episode % 10 == 0:
+        if episode % 20 == 0:
             agent.update_target_network()
 
-        agent.update_epsilon(episode, num_episodes)
+        agent.update_epsilon()
 
     plt.figure(figsize=(10, 5))
     plt.plot(rewards, label='Reward per Episode')

@@ -131,31 +131,21 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0  # Reset move counter on scoring
-            reward = 200
+            reward = 100  # Reward for eating an apple
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = 0
+            reward = -1  # Small penalty for each move
 
         if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
             self.done = True
-            reward = -1000  # Higher penalty for not scoring within some number of moves
+            reward = -1000  # Penalty for not scoring within some number of moves
             return self.get_state(), reward, self.done, {}
-
-        move_data = {
-            "move_number": self.move_counter,
-            "action_taken": action,
-            "reward": reward,
-            "game_over": self.done,
-            "score": self.score
-        }
-        self.move_log.append(move_data)
 
         for enemy in self.enemies:
             self.move_enemy(enemy)
 
         return self.get_state(), reward, self.done, {}
-
     def direction_to_index(self, direction):
         direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
         return direction_map.get(direction, 0)
