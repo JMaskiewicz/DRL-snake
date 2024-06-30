@@ -140,7 +140,7 @@ class SnakeGameAI(gym.Env):
             self.snake.pop()
             reward = -0.1  # Small penalty for each move
 
-        if self.move_counter >= 1000:  # Check if some number of moves have passed without scoring
+        if self.move_counter >= 10000:  # Check if some number of moves have passed without scoring
             self.done = True
             reward = -100  # Penalty for not scoring within some number of moves
             return self.get_state(), reward, self.done, {}
@@ -217,6 +217,6 @@ if __name__ == '__main__':
     random_number_2 = random.randint(0, size - 2)
     obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                  (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, 5))]
-    game = SnakeGameAI(obstacles=obstacles, enemy_count=2, apple_count=2, headless=False, size=size)  # Set headless to False to render and play as human
+                [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, 10))]
+    game = SnakeGameAI(obstacles=obstacles, enemy_count=4, apple_count=3, headless=False, size=size)  # Set headless to False to render and play as human
     game.run_game()

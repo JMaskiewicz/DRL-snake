@@ -22,13 +22,6 @@ class Linear_QNet(nn.Module):
         x = self.linear2(x)
         return x
 
-'''    def save(self, file_name='model.pth'):
-        model_folder_path = './model'
-        if not os.path.exists(model_folder_path):
-            os.makedirs(model_folder_path)
-        file_name = os.path.join(model_folder_path, file_name)
-        torch.save(self.state_dict(), file_name)
-'''
 class QTrainer:
     def __init__(self, model, lr, gamma):
         self.lr = lr
@@ -142,7 +135,7 @@ class Agent:
         return action
 
     def train(self, envs):
-        print("Training")
+        # print("Training")
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
@@ -159,13 +152,14 @@ class Agent:
                     dones[idx] = done
 
         if len(self.replay_buffer) < self.batch_size:
-            print("Not enough samples in the replay buffer to sample a batch.")
+            # print("Not enough samples in the replay buffer to sample a batch.")
             return total_reward
 
         batch = self.replay_buffer.sample(self.batch_size)
         loss = self.trainer.train_step(*batch)
         self.losses.append(loss)
         self.replay_buffer.clear()
+        print('Loss:', loss)
         return total_reward
 
     def update_epsilon(self):
@@ -180,7 +174,7 @@ def play_with_model(model, env):
     done = False
 
     while not done:
-        state = torch.FloatTensor(state).view(1, 1, env.size, env.size)  # Ensure state is reshaped
+        state = torch.FloatTensor(state).view(1, -1)  # Ensure state is reshaped
         action = model(state).argmax(1).item()
         next_state, reward, done, _ = env.step(action)
         state = next_state
@@ -192,11 +186,11 @@ def play_with_model(model, env):
 
 
 if __name__ == "__main__":
-    num_episodes = 1000
+    num_episodes = 10000
     workers = 1
     envs = []
     size = 64
-    obstacle_number = 5
+    obstacle_number = 10
 
     for _ in range(workers):
         random_number = random.randint(0, size - 2)
@@ -205,7 +199,7 @@ if __name__ == "__main__":
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
                      range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 2), apple_count=random.randint(1, 5),
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 2), apple_count=random.randint(2, 5),
                           headless=True, size=size)
         envs.append(env)
 

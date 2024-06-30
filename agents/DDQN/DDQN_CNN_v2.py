@@ -21,10 +21,10 @@ class DuelingQNetworkCNN(nn.Module):
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
         self.dropout3 = nn.Dropout(dropout_rate)
         conv_output_size = self._get_conv_output((1, input_channels, input_size, input_size))
-        self.fc1 = nn.Linear(conv_output_size, 512)
+        self.fc1 = nn.Linear(conv_output_size, 1024)
         self.dropout4 = nn.Dropout(dropout_rate)
-        self.fc_value = nn.Linear(512, 1)
-        self.fc_advantage = nn.Linear(512, n_actions)
+        self.fc_value = nn.Linear(1024, 1)
+        self.fc_advantage = nn.Linear(1024, n_actions)
 
     def forward(self, state):
         x = torch.relu(self.conv1(state))
@@ -102,7 +102,7 @@ class AgentDDQN:
         return action
 
     def train(self, envs):
-        print("Training")
+        # print("Training")
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
@@ -119,7 +119,7 @@ class AgentDDQN:
                     dones[idx] = done
 
         if len(self.replay_buffer) < self.batch_size:
-            print("Not enough samples in the replay buffer to sample a batch.")
+            # print("Not enough samples in the replay buffer to sample a batch.")
             return total_reward
 
         batch = self.replay_buffer.sample(self.batch_size)
@@ -177,11 +177,11 @@ def play_with_model(model, env):
 
 
 if __name__ == "__main__":
-    num_episodes = 1000
-    workers = 8
+    num_episodes = 50000
+    workers = 1
     envs = []
     size = 64
-    obstacle_number = 5
+    obstacle_number = 0
 
     for _ in range(workers):
         random_number = random.randint(0, size - 2)
@@ -190,13 +190,13 @@ if __name__ == "__main__":
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
                      range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 2), apple_count=random.randint(1, 5),
+        env = SnakeGameAI(obstacles=[], enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
                           headless=True, size=size)
         envs.append(env)
 
     input_dims = envs[0].observation_space.shape[0]
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128, learning_rate=0.0033, epsilon_decay=0.9975, gamma=0.95)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=256, learning_rate=0.002, epsilon_decay=0.9975, gamma=0.95)
 
     rewards = []
 
@@ -234,9 +234,9 @@ if __name__ == "__main__":
                  (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                 [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
 
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=0, apple_count=2, headless=False, size=size)
+    env_to_play = SnakeGameAI(obstacles=[], enemy_count=0, apple_count=2, headless=False, size=size)
 
     # After training, play the game with the trained model
     pygame.init()
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=2, headless=False, size=size)
+    env_to_play = SnakeGameAI(obstacles=[], enemy_count=0, apple_count=2, headless=False, size=size)
     play_with_model(agent.current_model, env_to_play)
