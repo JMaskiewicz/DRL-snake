@@ -146,13 +146,13 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0
-            reward = 1
+            reward = 10
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
             reward = -0.01
 
-        if self.move_counter >= 100000:
+        if self.move_counter >= 10000:
             self.done = True
             reward = 0
             return self.get_state(), reward, self.done, {}

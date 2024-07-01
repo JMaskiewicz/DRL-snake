@@ -196,11 +196,11 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 300
+    num_episodes = 500
     workers = 1
     envs = []
     size = 32
-    obstacle_number = 0
+    obstacle_number = 5
 
     for _ in range(workers):
         random_number = random.randint(0, size - 2)
@@ -209,26 +209,38 @@ if __name__ == "__main__":
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
                      range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=[], enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
                           headless=False, size=size)
         envs.append(env)
 
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=256, learning_rate=0.01, epsilon_decay=0.01, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=512, learning_rate=0.005, epsilon_decay=0.01, gamma=0.9)
 
     rewards = []
-
+    '''
     import os
-
-    log_dir = r'C:\Users\jmask\OneDrive\Pulpit\snake'
+    # Create a directory to store logs for debugging
+    log_dir = r''
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-
+    '''
 
     for episode in tqdm(range(num_episodes)):
-        reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
+        envs = []
+        for _ in range(workers):
+            random_number = random.randint(0, size - 2)
+            random_number_2 = random.randint(0, size - 2)
+            obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
+                         (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
+                        [(random.randint(0, size), random.randint(0, size)) for _ in
+                         range(random.randint(0, obstacle_number))]
+            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
+                              headless=False, size=size)
+            envs.append(env)
+
+        reward = agent.train(envs, render=True)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
