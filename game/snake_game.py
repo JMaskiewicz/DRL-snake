@@ -116,7 +116,7 @@ class SnakeGameAI(gym.Env):
                     state[part] = -2
 
         # Normalize state
-        state = (state + 2) / 5.0  # Normalize to range [0, 1]
+        # state = (state + 2) / 5.0  # Normalize to range [0, 1]
         return state.flatten()
 
     def step(self, action):
