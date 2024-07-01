@@ -38,6 +38,7 @@ class SnakeGameAI(gym.Env):
 
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=3, shape=(self.size * self.size,), dtype=np.int32)
+        self.input_buffer = None  # Initialize input buffer
 
         self.reset()
 
@@ -119,12 +120,19 @@ class SnakeGameAI(gym.Env):
         return state.flatten()
 
     def step(self, action):
-        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
+        opposite_direction_map = {0: 1, 1: 0, 2: 3, 3: 2}  # Mapping opposite directions
+
+        # Prevent reversing direction: Disallow the action that leads to the opposite direction
+        current_direction_index = self.direction_to_index(self.direction)
+        if action == opposite_direction_map[current_direction_index]:
+            action = current_direction_index  # Hold the current direction if opposite is chosen
+
         self.direction = direction_map[action]  # Use the action as an index to get the direction
 
+        # Following is your existing step logic after determining direction
         new_head = (self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1])
-
-        collision_objects = self.snake + self.obstacles + [part for enemy in self.enemies for part in enemy]
+        collision_objects = self.snake[1:] + self.obstacles + [part for enemy in self.enemies for part in enemy]
 
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
@@ -133,20 +141,20 @@ class SnakeGameAI(gym.Env):
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
-        self.move_counter += 1  # Increment move counter
+        self.move_counter += 1
 
         if new_head in self.apples:
             self.score += 1
-            self.move_counter = 0  # Reset move counter on scoring
-            reward = 1  # Reward for eating an apple
+            self.move_counter = 0
+            reward = 1
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = - 0.01  # Small penalty for each move
+            reward = -0.01
 
-        if self.move_counter >= 100000:  # Check if some number of moves have passed without scoring
+        if self.move_counter >= 100000:
             self.done = True
-            reward = 0  # Penalty for not scoring within some number of moves
+            reward = 0
             return self.get_state(), reward, self.done, {}
 
         for enemy in self.enemies:

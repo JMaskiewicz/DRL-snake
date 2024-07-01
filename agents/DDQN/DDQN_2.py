@@ -108,14 +108,21 @@ class AgentDDQN:
 
         return total_reward
 
-    def train_with_logging(self, envs, render=False, log_path='game_log.csv'):
+    def train_with_logging(self, envs, episode, render=False, log_dir='game_logs'):
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
 
+        # Ensure the directory exists
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
+        # Create a unique filename for each game using the episode number
+        log_path = os.path.join(log_dir, f'game_log_{episode}.csv')
+
         with open(log_path, 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['State', 'Action', 'Reward', 'Next State', 'Done'])  # Header
+            writer.writerow(['State', 'Action', 'Reward', 'Next State', 'Done'])  # Write the header
 
             while not all(dones):
                 actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
@@ -135,18 +142,17 @@ class AgentDDQN:
                             env.render()
                             pygame.time.wait(100)  # Delay in milliseconds
 
-            if len(self.replay_buffer) >= self.batch_size:
-                batch = self.replay_buffer.sample(self.batch_size)
-                loss = self.compute_loss(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                self.losses.append(loss.item())
-                print(f"Loss: {loss.item()}")
-                self.replay_buffer.clear()
+                if len(self.replay_buffer) >= self.batch_size:
+                    batch = self.replay_buffer.sample(self.batch_size)
+                    loss = self.compute_loss(batch)
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
+                    self.losses.append(loss.item())
+                    print(f"Loss: {loss.item()}")
+                    self.replay_buffer.clear()
 
-        return total_reward
-
+            return total_reward
 
     def compute_loss(self, batch):
         states, actions, rewards, next_states, dones = batch
@@ -190,7 +196,7 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 100
+    num_episodes = 300
     workers = 1
     envs = []
     size = 32
@@ -214,8 +220,15 @@ if __name__ == "__main__":
 
     rewards = []
 
+    import os
+
+    log_dir = r'C:\Users\jmask\OneDrive\Pulpit\snake'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+
     for episode in tqdm(range(num_episodes)):
-        reward = agent.train_with_logging(envs, render=True)
+        reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
