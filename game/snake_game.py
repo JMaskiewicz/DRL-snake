@@ -142,9 +142,9 @@ class SnakeGameAI(gym.Env):
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = + 0.01  # Small penalty for each move
+            reward = - 0.01  # Small penalty for each move
 
-        if self.move_counter >= 10000:  # Check if some number of moves have passed without scoring
+        if self.move_counter >= 100000:  # Check if some number of moves have passed without scoring
             self.done = True
             reward = 0  # Penalty for not scoring within some number of moves
             return self.get_state(), reward, self.done, {}

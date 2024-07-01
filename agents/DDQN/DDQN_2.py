@@ -9,6 +9,7 @@ from collections import deque
 import pygame
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import csv
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -74,13 +75,14 @@ class AgentDDQN:
             action = random.randint(0, env.action_space.n - 1)
         return action
 
-    def train(self, envs):
+    def train(self, envs, render=False):
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
 
         while not all(dones):
-            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in range(len(envs))]
+            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+                       range(len(envs))]
 
             for idx, env in enumerate(envs):
                 if not dones[idx]:
@@ -89,6 +91,10 @@ class AgentDDQN:
                     states[idx] = next_state
                     total_reward += reward
                     dones[idx] = done
+
+                    if render:
+                        env.render()
+                        pygame.time.wait(100)  # Delay in milliseconds
 
         if len(self.replay_buffer) >= self.batch_size:
             batch = self.replay_buffer.sample(self.batch_size)
@@ -101,6 +107,46 @@ class AgentDDQN:
             self.replay_buffer.clear()
 
         return total_reward
+
+    def train_with_logging(self, envs, render=False, log_path='game_log.csv'):
+        states = [env.reset() for env in envs]
+        dones = [False] * len(envs)
+        total_reward = 0
+
+        with open(log_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['State', 'Action', 'Reward', 'Next State', 'Done'])  # Header
+
+            while not all(dones):
+                actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+                           range(len(envs))]
+
+                for idx, env in enumerate(envs):
+                    if not dones[idx]:
+                        next_state, reward, done, _ = env.step(actions[idx])
+                        self.replay_buffer.push(states[idx], actions[idx], reward, next_state, done)
+                        writer.writerow(
+                            [states[idx].tolist(), actions[idx], reward, next_state.tolist(), done])  # Log details
+                        states[idx] = next_state
+                        total_reward += reward
+                        dones[idx] = done
+
+                        if render:
+                            env.render()
+                            pygame.time.wait(100)  # Delay in milliseconds
+
+            if len(self.replay_buffer) >= self.batch_size:
+                batch = self.replay_buffer.sample(self.batch_size)
+                loss = self.compute_loss(batch)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                self.losses.append(loss.item())
+                print(f"Loss: {loss.item()}")
+                self.replay_buffer.clear()
+
+        return total_reward
+
 
     def compute_loss(self, batch):
         states, actions, rewards, next_states, dones = batch
@@ -123,7 +169,7 @@ class AgentDDQN:
         return loss
 
     def update_epsilon(self):
-        self.epsilon = self.epsilon * self.epsilon_decay
+        self.epsilon = self.epsilon - self.epsilon_decay
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
@@ -144,10 +190,10 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 2000
+    num_episodes = 100
     workers = 1
     envs = []
-    size = 24
+    size = 32
     obstacle_number = 0
 
     for _ in range(workers):
@@ -164,16 +210,16 @@ if __name__ == "__main__":
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=128, learning_rate=0.001, epsilon_decay=0.95, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=256, learning_rate=0.01, epsilon_decay=0.01, gamma=0.9)
 
     rewards = []
 
     for episode in tqdm(range(num_episodes)):
-        reward = agent.train(envs)
+        reward = agent.train_with_logging(envs, render=True)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
-        if episode % 20 == 0:
+        if episode % 10 == 0:
             agent.update_target_network()
 
         agent.update_epsilon()
