@@ -123,6 +123,7 @@ class SnakeGameAI(gym.Env):
         direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
         opposite_direction_map = {0: 1, 1: 0, 2: 3, 3: 2}  # Mapping opposite directions
 
+        # TODO 1: Implement the logic to prevent reversing direction but after new approach check if it is still needed
         # Prevent reversing direction: Disallow the action that leads to the opposite direction
         current_direction_index = self.direction_to_index(self.direction)
         if action == opposite_direction_map[current_direction_index]:
