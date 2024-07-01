@@ -34,6 +34,7 @@ class SnakeGameAI(gym.Env):
                          [(self.size - 1, j) for j in range(self.size)]
         self.custom_obstacles = obstacles if obstacles is not None else []
         self.obstacles = self.border_obstacles + self.custom_obstacles
+        self.score = 0
 
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=3, shape=(self.size * self.size,), dtype=np.int32)
@@ -41,7 +42,9 @@ class SnakeGameAI(gym.Env):
         self.reset()
 
     def reset(self):
-        self.snake = [(self.size // 2, self.size // 2)]
+        self.snake = [(self.size // 2, self.size // 2),
+                      (self.size // 2, self.size // 2 + 1),
+                      (self.size // 2, self.size // 2 + 2)]
         self.direction = (0, -1)
         self.apples = [self.spawn_apple() for _ in range(self.apple_count)]
         self.score = 0
@@ -122,10 +125,11 @@ class SnakeGameAI(gym.Env):
         new_head = (self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1])
 
         collision_objects = self.snake + self.obstacles + [part for enemy in self.enemies for part in enemy]
+
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
             self.done = True
-            reward = -100  # Punishment for dying
+            reward = -10  # Punishment for dying
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
@@ -134,15 +138,15 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0  # Reset move counter on scoring
-            reward = 50  # Reward for eating an apple
+            reward = 1  # Reward for eating an apple
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = -0.1  # Small penalty for each move
+            reward = + 0.01  # Small penalty for each move
 
         if self.move_counter >= 10000:  # Check if some number of moves have passed without scoring
             self.done = True
-            reward = -100  # Penalty for not scoring within some number of moves
+            reward = 0  # Penalty for not scoring within some number of moves
             return self.get_state(), reward, self.done, {}
 
         for enemy in self.enemies:

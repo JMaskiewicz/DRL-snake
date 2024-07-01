@@ -76,7 +76,8 @@ class AgentDDQN:
     def select_action(self, state, env):
         if random.random() > self.epsilon:
             state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
-            action = self.current_model(state).argmax(1).item()
+            with torch.no_grad():
+                action = self.current_model(state).argmax(1).item()
         else:
             action = random.randint(0, env.action_space.n - 1)
         return action
@@ -97,17 +98,16 @@ class AgentDDQN:
                     total_reward += reward
                     dones[idx] = done
 
-        if len(self.replay_buffer) < self.batch_size:
-            return total_reward
+        if len(self.replay_buffer) >= self.batch_size:
+            batch = self.replay_buffer.sample(self.batch_size)
+            loss = self.compute_loss(batch)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            self.losses.append(loss.item())
+            print(f"Loss: {loss.item()}")
+            self.replay_buffer.clear()
 
-        batch = self.replay_buffer.sample(self.batch_size)
-        loss = self.compute_loss(batch)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        self.losses.append(loss.item())
-        print(f"Loss: {loss.item()}")
-        self.replay_buffer.clear()
         return total_reward
 
     def compute_loss(self, batch):
@@ -115,7 +115,6 @@ class AgentDDQN:
 
         states = torch.FloatTensor(states).view(-1, self.env_size * self.env_size)
         next_states = torch.FloatTensor(next_states).view(-1, self.env_size * self.env_size)
-
         actions = torch.LongTensor(actions)
         rewards = torch.FloatTensor(rewards)
         dones = torch.FloatTensor(dones)
@@ -156,7 +155,7 @@ if __name__ == "__main__":
     num_episodes = 1000
     workers = 1
     envs = []
-    size = 64
+    size = 16
     obstacle_number = 0
 
     for _ in range(workers):
@@ -173,7 +172,7 @@ if __name__ == "__main__":
     observation = envs[0].reset()
     input_dims = observation.size
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=256, learning_rate=0.002, epsilon_decay=0.9975, gamma=0.95)
+    agent = AgentDDQN(input_dims, n_actions, input_size=size, batch_size=128, learning_rate=0.0025, epsilon_decay=0.9975, gamma=0.95)
 
     rewards = []
 
