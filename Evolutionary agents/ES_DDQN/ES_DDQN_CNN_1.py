@@ -66,6 +66,7 @@ class DuelingQNetworkCNN(nn.Module):
         x = self.dropout3(x)
         return x
 
+
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
@@ -86,81 +87,98 @@ class ReplayBuffer:
     def clear(self):
         self.buffer.clear()
 
+
 class AgentDDQN:
     def __init__(self, input_dims, n_actions, learning_rate=0.00025, env_size=20, input_size=20):
         self.env_size = env_size
-        self.current_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
-        self.target_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)  # input_channels set to 1
+        self.current_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)
+        self.target_model = DuelingQNetworkCNN(1, n_actions, input_size=input_size)
         self.target_model.load_state_dict(self.current_model.state_dict())
-        self.target_model.eval()
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
-        self.replay_buffer = ReplayBuffer(100000)
         self.epsilon = 1.0
         self.gamma = 0.95
 
     def select_action(self, state, env):
         if random.random() > self.epsilon:
-            state = torch.FloatTensor(state).view(1, 1, env.size,
-                                                  env.size)  # Reshape to (batch_size, channels, height, width)
+            state = torch.FloatTensor(state).view(1, 1, env.size, env.size)
             action = self.current_model(state).argmax(1).item()
         else:
             action = random.randint(0, env.action_space.n - 1)
         return action
 
     def train(self, envs, batch_size=2048):
-        print("Training")
+        print('Training...')
+        total_reward = 0
         states = [env.reset() for env in envs]
         dones = [False] * len(envs)
-        total_reward = 0
 
         while not all(dones):
             actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
                        range(len(envs))]
-
             for idx, env in enumerate(envs):
                 if not dones[idx]:
                     next_state, reward, done, _ = env.step(actions[idx])
-                    self.replay_buffer.push(states[idx], actions[idx], reward, next_state, done)
                     states[idx] = next_state
                     total_reward += reward
                     dones[idx] = done
 
-            if len(self.replay_buffer) > batch_size:
-                batch = self.replay_buffer.sample(batch_size)
-                loss = self.compute_loss(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-        self.replay_buffer.clear()
         return total_reward
 
-    def compute_loss(self, batch):
-        states, actions, rewards, next_states, dones = batch
-        states = torch.FloatTensor(states).view(-1, 1, self.env_size,
-                                                self.env_size)  # Reshape to (batch_size, channels, height, width)
-        next_states = torch.FloatTensor(next_states).view(-1, 1, self.env_size,
-                                                          self.env_size)  # Reshape to (batch_size, channels, height, width)
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        dones = torch.FloatTensor(dones)
-
-        q_values = self.current_model(states)
-        next_q_values = self.current_model(next_states)
-        next_q_state_values = self.target_model(next_states)
-
-        q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-        next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
-        expected_q_value = rewards + self.gamma * next_q_value * (1 - dones)
-
-        loss = (q_value - expected_q_value.detach()).pow(2).mean()
-        return loss
-
-    def update_epsilon(self, episode, max_episodes):
-        self.epsilon = max(0.0001, 1.0 - episode / (max_episodes / 1.5))
+    def update_epsilon(self, generation, max_generations):
+        self.epsilon = max(0.01, 1.0 - generation / (max_generations / 1.5))
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
+
+
+def evolutionary_algorithm(envs, n_generations=3, population_size=50, elite_size=10, mutation_rate=0.01,
+                           target_update_interval=10):
+    population = [AgentDDQN(envs[0].observation_space.shape[0], envs[0].action_space.n, input_size=20) for _ in
+                  range(population_size)]
+    rewards = []
+
+    for generation in tqdm(range(n_generations)):
+        fitness = [agent.train(envs) for agent in population]
+        average_fitness = np.mean(fitness)
+        rewards.append(average_fitness)
+
+        # Print progress
+        print(f'Generation {generation}: Average Reward: {average_fitness}')
+        best_fitness = max(fitness)
+        print(f'Best Reward in Generation {generation}: {best_fitness}')
+
+        elite_indices = np.argsort(fitness)[-elite_size:]
+        elites = [population[idx] for idx in elite_indices]
+
+        new_population = elites.copy()
+        while len(new_population) < population_size:
+            parent1, parent2 = random.sample(elites, 2)
+            child = AgentDDQN(envs[0].observation_space.shape[0], envs[0].action_space.n, input_size=20)
+            for param1, param2, child_param in zip(parent1.current_model.parameters(),
+                                                   parent2.current_model.parameters(),
+                                                   child.current_model.parameters()):
+                crossover_point = random.randint(0, param1.numel())
+                child_param.data[:crossover_point] = param1.data[:crossover_point]
+                child_param.data[crossover_point:] = param2.data[crossover_point:]
+                if random.random() < mutation_rate:
+                    noise = torch.randn_like(child_param) * 0.1
+                    child_param.data += noise
+            new_population.append(child)
+
+        for agent in new_population:
+            agent.update_epsilon(generation, n_generations)
+
+        population = new_population
+
+        # Update target networks periodically
+        if generation % target_update_interval == 0:
+            for agent in population:
+                agent.update_target_network()
+
+    # Return the best agent
+    best_agent_idx = np.argmax(fitness)
+    best_agent = population[best_agent_idx]
+    return best_agent, rewards
 
 
 def play_with_model(model, env):
@@ -178,44 +196,31 @@ def play_with_model(model, env):
     env.close()
     print(f"Game Over! Score: {env.score}")
 
+
 if __name__ == "__main__":
-    num_episodes = 1000
-    workers = 32
+    workers = 64
     envs = []
-    size = 20
+    size = 64
     obstacle_number = 0
 
     for _ in range(workers):
-        random_number = random.randint(0, size-2)
-        random_number_2 = random.randint(0, size-2)
+        random_number = random.randint(0, size - 2)
+        random_number_2 = random.randint(0, size - 2)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                    [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
+                    [(random.randint(0, size), random.randint(0, size)) for _ in
+                     range(random.randint(0, obstacle_number))]
         env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 2),
                           headless=True, size=size)
         envs.append(env)
 
-    input_dims = envs[0].observation_space.shape[0]
-    n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, input_size=size)
-
-    rewards = []
-
-    for episode in tqdm(range(num_episodes)):
-        reward = agent.train(envs)
-        rewards.append(reward)
-        print(f"Episode {episode}, Reward: {reward}")
-
-        if episode % 10 == 0:
-            agent.update_target_network()
-
-        agent.update_epsilon(episode, num_episodes)
+    best_agent, rewards = evolutionary_algorithm(envs, n_generations=3, population_size=50, elite_size=10)
 
     plt.figure(figsize=(10, 5))
-    plt.plot(rewards, label='Reward per Episode')
-    plt.xlabel('Episode')
-    plt.ylabel('Total Reward')
-    plt.title('Total Reward per Episode over Training')
+    plt.plot(rewards, label='Average Reward per Generation')
+    plt.xlabel('Generation')
+    plt.ylabel('Average Reward')
+    plt.title('Average Reward per Generation over Training')
     plt.legend()
     plt.grid(True)
     plt.show()
@@ -227,9 +232,10 @@ if __name__ == "__main__":
                 [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
     env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=2, headless=False, size=size)
 
-    # After training, play the game with the trained model
+    # After training, play the game with the best model
     pygame.init()
     env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=2, headless=False, size=size)
-    play_with_model(agent.current_model, env_to_play)
+    play_with_model(best_agent.current_model, env_to_play)
+
 
 

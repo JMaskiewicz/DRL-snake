@@ -4,6 +4,14 @@ import random
 import gym
 from gym import spaces
 
+
+'''
+0: Move up (direction (0, -1))
+1: Move down (direction (0, 1))
+2: Move left (direction (-1, 0))
+3: Move right (direction (1, 0))
+'''
+
 class SnakeGameAI(gym.Env):
     def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True, size=64):
         super(SnakeGameAI, self).__init__()
@@ -37,7 +45,7 @@ class SnakeGameAI(gym.Env):
         self.score = 0
 
         self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=-2, high=3, shape=(self.size * self.size,), dtype=np.int32)
+        self.observation_space = spaces.Box(low=-2, high=3, shape=(9 * 9,), dtype=np.int32)  # Update shape
         self.input_buffer = None  # Initialize input buffer
 
         self.reset()
@@ -95,27 +103,27 @@ class SnakeGameAI(gym.Env):
         else:
             enemy.pop()
 
-    def get_state(self):
-        state = np.zeros((self.size, self.size), dtype=int)
-        if self.snake:
-            head = self.snake[0]
-            if 0 <= head[0] < self.size and 0 <= head[1] < self.size:
-                state[head] = 1  # Unique value for the snake's head
-            for s in self.snake[1:]:
-                if 0 <= s[0] < self.size and 0 <= s[1] < self.size:
-                    state[s] = 2  # Snake's body
-        for apple in self.apples:
-            if 0 <= apple[0] < self.size and 0 <= apple[1] < self.size:
-                state[apple] = 3
-        for obs in self.obstacles:
-            if 0 <= obs[0] < self.size and 0 <= obs[1] < self.size:
-                state[obs] = 4
-        for enemy in self.enemies:
-            for part in enemy:
-                if 0 <= part[0] < self.size and 0 <= part[1] < self.size:
-                    state[part] = 5
+    def get_local_grid(self, head, size=3):
+        local_grid = np.zeros((size, size), dtype=int)
+        half_size = size // 2
+        for i in range(size):
+            for j in range(size):
+                x = head[0] - half_size + i
+                y = head[1] - half_size + j
+                if 0 <= x < self.size and 0 <= y < self.size:
+                    if (x, y) in self.snake:
+                        local_grid[i, j] = 1 if (x, y) == head else 2
+                    elif (x, y) in self.apples:
+                        local_grid[i, j] = 3
+                    elif (x, y) in self.obstacles:
+                        local_grid[i, j] = 4
+                    elif any((x, y) in enemy for enemy in self.enemies):
+                        local_grid[i, j] = 5
+        return local_grid.flatten()
 
-        return state.flatten()
+    def get_state(self):
+        head = self.snake[0]
+        return self.get_local_grid(head)
 
     def step(self, action):
         direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
@@ -155,12 +163,18 @@ class SnakeGameAI(gym.Env):
 
         for enemy in self.enemies:
             self.move_enemy(enemy)
-        # print('Reward:', reward)
         return self.get_state(), reward, self.done, {}
 
     def direction_to_index(self, direction):
         direction_map = {(0, -1): 0, (0, 1): 1, (-1, 0): 2, (1, 0): 3}
         return direction_map.get(direction, 0)
+
+    def get_valid_actions(self):
+        valid_actions = [0, 1, 2, 3]  # Up, Down, Left, Right
+        current_direction_index = self.direction_to_index(self.direction)
+        opposite_direction_map = {0: 1, 1: 0, 2: 3, 3: 2}
+        valid_actions.remove(opposite_direction_map[current_direction_index])
+        return valid_actions
 
     def render(self):
         if self.headless:
@@ -200,8 +214,12 @@ class SnakeGameAI(gym.Env):
 
             if not self.is_human:
                 if self.model:
-                    prediction = self.model.predict(self.get_state().reshape(1, -1))
-                    self.step(np.argmax(prediction))
+                    valid_actions = self.get_valid_actions()
+                    state = self.get_state().reshape(1, -1)
+                    q_values = self.model.predict(state)[0]
+                    valid_q_values = [q_values[a] for a in valid_actions]
+                    action = valid_actions[np.argmax(valid_q_values)]
+                    self.step(action)
                 else:
                     print("No AI model provided, switching to manual control.")
                     self.is_human = True

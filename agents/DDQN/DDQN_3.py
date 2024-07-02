@@ -69,30 +69,34 @@ class AgentDDQN:
         self.batch_size = batch_size
         self.losses = []
 
-    def select_action(self, state, env):
+    def select_action(self, state, current_direction):
         state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
         with torch.no_grad():
             q_values = self.current_model(state)
 
+        valid_actions = self.get_valid_actions(current_direction)
+        valid_q_values = q_values[0, valid_actions]  # Get Q-values only for valid actions
+
         if random.random() > self.epsilon:
-            action = q_values.argmax(1).item()  # Choose best action based on current policy
+            action_index = valid_q_values.argmax().item()  # Choose best action based on current policy
+            action = valid_actions[action_index]
         else:
-            action = random.randint(0, env.action_space.n - 1)  # Choose a random action
+            action = random.choice(valid_actions)  # Choose a random valid action
 
         # Print the Q-values and the chosen action for debugging purposes
         # print("Q-values:", q_values.cpu().numpy())
         # print("Selected action:", action)
 
-
         return action
 
     def train(self, envs, render=False):
         states = [env.reset() for env in envs]
+        current_directions = [env.direction for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
 
         while not all(dones):
-            actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+            actions = [self.select_action(states[idx], current_directions[idx]) if not dones[idx] else None for idx in
                        range(len(envs))]
 
             for idx, env in enumerate(envs):
@@ -100,6 +104,7 @@ class AgentDDQN:
                     next_state, reward, done, _ = env.step(actions[idx])
                     self.replay_buffer.push(states[idx], actions[idx], reward, next_state, done)
                     states[idx] = next_state
+                    current_directions[idx] = env.direction  # Update the current direction
                     total_reward += reward
                     dones[idx] = done
 
@@ -107,30 +112,29 @@ class AgentDDQN:
                         env.render()
                         pygame.time.wait(100)  # Delay in milliseconds
 
-        # Only perform updates if enough samples are available in the buffer
-        if len(self.replay_buffer) >= self.batch_size:
-            print("Updating model")
-            minibatch_size = len(self.replay_buffer) // 16  # Define minibatch size as 1/16th of replay buffer size
+            if len(self.replay_buffer) >= self.batch_size:
+                print("Updating model")
+                minibatch_size = len(self.replay_buffer) // 16  # Define minibatch size as 1/16th of replay buffer size
 
-            # Ensure the minibatch size is at least 1 and not smaller than the regular batch size
-            minibatch_size = max(minibatch_size, 1)
-            minibatch_size = min(minibatch_size, self.batch_size)
+                # Ensure the minibatch size is at least 1 and not smaller than the regular batch size
+                minibatch_size = max(minibatch_size, 1)
+                minibatch_size = min(minibatch_size, self.batch_size)
 
-            for _ in range(16):  # Perform 16 updates to cover the entire replay buffer approximately
-                batch = self.replay_buffer.sample(minibatch_size)
-                loss = self.compute_loss(batch)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                self.losses.append(loss.item())
-                #print(f"Loss: {loss.item()}")
+                for _ in range(16):  # Perform 16 updates to cover the entire replay buffer approximately
+                    batch = self.replay_buffer.sample(minibatch_size)
+                    loss = self.compute_loss(batch)
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
+                    self.losses.append(loss.item())
 
-            self.replay_buffer.clear()
+                self.replay_buffer.clear()
 
         return total_reward
 
     def train_with_logging(self, envs, episode, render=False, log_dir='game_logs'):
         states = [env.reset() for env in envs]
+        current_directions = [env.direction for env in envs]
         dones = [False] * len(envs)
         total_reward = 0
 
@@ -143,19 +147,25 @@ class AgentDDQN:
 
         with open(log_path, 'w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['State', 'Action', 'Reward', 'Next State', 'Done'])  # Write the header
+            writer.writerow(
+                ['State', 'Action', 'Reward', 'Next State', 'Done', 'Q-values'])  # Add Q-values to the header
 
             while not all(dones):
-                actions = [self.select_action(states[idx], envs[idx]) if not dones[idx] else None for idx in
+                actions = [self.select_action(states[idx], current_directions[idx]) if not dones[idx] else None for idx
+                           in
                            range(len(envs))]
 
                 for idx, env in enumerate(envs):
                     if not dones[idx]:
+                        q_values = self.current_model(torch.FloatTensor(states[idx]).view(1, -1)).cpu().detach().numpy()
+                        valid_actions = self.get_valid_actions(current_directions[idx])
+                        valid_q_values = q_values[0, valid_actions]  # Get Q-values only for valid actions
                         next_state, reward, done, _ = env.step(actions[idx])
                         self.replay_buffer.push(states[idx], actions[idx], reward, next_state, done)
-                        writer.writerow(
-                            [states[idx].tolist(), actions[idx], reward, next_state.tolist(), done])  # Log details
+                        writer.writerow([states[idx].tolist(), actions[idx], reward, next_state.tolist(), done,
+                                         valid_q_values.tolist()])  # Log details including valid Q-values
                         states[idx] = next_state
+                        current_directions[idx] = env.direction  # Update the current direction
                         total_reward += reward
                         dones[idx] = done
 
@@ -170,10 +180,9 @@ class AgentDDQN:
                     loss.backward()
                     self.optimizer.step()
                     self.losses.append(loss.item())
-                    print(f"Loss: {loss.item()}")
                     self.replay_buffer.clear()
 
-            return total_reward
+        return total_reward
 
     def compute_loss(self, batch):
         states, actions, rewards, next_states, dones = batch
@@ -200,6 +209,13 @@ class AgentDDQN:
 
     def update_target_network(self):
         self.target_model.load_state_dict(self.current_model.state_dict())
+
+    def get_valid_actions(self, current_direction):
+        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
+        opposite_direction_map = {0: 1, 1: 0, 2: 3, 3: 2}
+        current_direction_index = direction_map.index(current_direction)
+        valid_actions = [i for i in range(len(direction_map)) if i != opposite_direction_map[current_direction_index]]
+        return valid_actions
 
 def play_with_model(model, env):
     state = env.reset()
@@ -238,7 +254,7 @@ if __name__ == "__main__":
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=256, learning_rate=0.00075, epsilon_decay=0.025, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=64, learning_rate=0.00075, epsilon_decay=0.02, gamma=0)
 
     rewards = []
 
@@ -262,8 +278,8 @@ if __name__ == "__main__":
                               headless=False, size=size)
             envs.append(env)
 
-        reward = agent.train(envs, render=True)
-        # reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
+        #reward = agent.train(envs, render=True)
+        reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
