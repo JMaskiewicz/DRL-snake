@@ -32,9 +32,10 @@ class ReplayBuffer:
         self.buffer.clear()
 
 class DuelingQNetwork(nn.Module):
-    def __init__(self, input_dims, n_actions):
+    def __init__(self, input_dims, n_actions, embedding_dim=32):
         super(DuelingQNetwork, self).__init__()
-        self.fc1 = nn.Linear(input_dims, 256)
+        self.embedding = nn.Embedding(6, embedding_dim)  # 6 unique values in state representation
+        self.fc1 = nn.Linear(input_dims * embedding_dim, 256)
         self.fc2 = nn.Linear(256, 128)
         self.fc_value = nn.Linear(128, 64)
         self.value = nn.Linear(64, 1)
@@ -42,7 +43,9 @@ class DuelingQNetwork(nn.Module):
         self.advantage = nn.Linear(64, n_actions)
 
     def forward(self, state):
-        x = torch.relu(self.fc1(state))
+        state = state.long()  # Ensure state is of type LongTensor for embedding
+        x = self.embedding(state).view(state.size(0), -1)  # Flatten after embedding
+        x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         val = torch.relu(self.fc_value(x))
         val = self.value(val)
@@ -67,12 +70,20 @@ class AgentDDQN:
         self.losses = []
 
     def select_action(self, state, env):
+        state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
+        with torch.no_grad():
+            q_values = self.current_model(state)
+
         if random.random() > self.epsilon:
-            state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
-            with torch.no_grad():
-                action = self.current_model(state).argmax(1).item()
+            action = q_values.argmax(1).item()  # Choose best action based on current policy
         else:
-            action = random.randint(0, env.action_space.n - 1)
+            action = random.randint(0, env.action_space.n - 1)  # Choose a random action
+
+        # Print the Q-values and the chosen action for debugging purposes
+        # print("Q-values:", q_values.cpu().numpy())
+        # print("Selected action:", action)
+
+
         return action
 
     def train(self, envs, render=False):
@@ -96,14 +107,24 @@ class AgentDDQN:
                         env.render()
                         pygame.time.wait(100)  # Delay in milliseconds
 
+        # Only perform updates if enough samples are available in the buffer
         if len(self.replay_buffer) >= self.batch_size:
-            batch = self.replay_buffer.sample(self.batch_size)
-            loss = self.compute_loss(batch)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-            self.losses.append(loss.item())
-            print(f"Loss: {loss.item()}")
+            print("Updating model")
+            minibatch_size = len(self.replay_buffer) // 16  # Define minibatch size as 1/16th of replay buffer size
+
+            # Ensure the minibatch size is at least 1 and not smaller than the regular batch size
+            minibatch_size = max(minibatch_size, 1)
+            minibatch_size = min(minibatch_size, self.batch_size)
+
+            for _ in range(16):  # Perform 16 updates to cover the entire replay buffer approximately
+                batch = self.replay_buffer.sample(minibatch_size)
+                loss = self.compute_loss(batch)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                self.losses.append(loss.item())
+                #print(f"Loss: {loss.item()}")
+
             self.replay_buffer.clear()
 
         return total_reward
@@ -196,27 +217,28 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 500
-    workers = 1
+    num_episodes = 1000
+    workers = 16
     envs = []
-    size = 32
-    obstacle_number = 5
-
+    size = 20
+    obstacle_number = 0
+    obstacles = [(random.randint(0, size), random.randint(0, size)) for _ in range(0, obstacle_number)]
+    obstacles = []
     for _ in range(workers):
-        random_number = random.randint(0, size - 2)
+        '''random_number = random.randint(0, size - 2)
         random_number_2 = random.randint(0, size - 2)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
-                     range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
-                          headless=False, size=size)
+                     range(random.randint(0, obstacle_number))]'''
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 3),
+                          headless=True, size=size)
         envs.append(env)
 
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=512, learning_rate=0.005, epsilon_decay=0.01, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=2048, learning_rate=0.0005, epsilon_decay=0.005, gamma=0.95)
 
     rewards = []
     '''
@@ -230,17 +252,17 @@ if __name__ == "__main__":
     for episode in tqdm(range(num_episodes)):
         envs = []
         for _ in range(workers):
-            random_number = random.randint(0, size - 2)
+            '''random_number = random.randint(0, size - 2)
             random_number_2 = random.randint(0, size - 2)
             obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                          (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                         [(random.randint(0, size), random.randint(0, size)) for _ in
-                         range(random.randint(0, obstacle_number))]
-            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
-                              headless=False, size=size)
+                         range(random.randint(0, obstacle_number))]'''
+            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 3),
+                              headless=True, size=size)
             envs.append(env)
 
-        reward = agent.train(envs, render=True)
+        reward = agent.train(envs, render=False)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
