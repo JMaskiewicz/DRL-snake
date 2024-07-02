@@ -103,8 +103,8 @@ class SnakeGameAI(gym.Env):
         else:
             enemy.pop()
 
-    def get_local_grid(self, head, size=40):
-        local_grid = np.full((size, size), 4, dtype=int)  # Fill the grid with obstacles (4)
+    def get_local_grid(self, head, size=3):
+        local_grid = np.zeros((size, size), dtype=int)
         half_size = size // 2
         for i in range(size):
             for j in range(size):
@@ -119,8 +119,6 @@ class SnakeGameAI(gym.Env):
                         local_grid[i, j] = 4
                     elif any((x, y) in enemy for enemy in self.enemies):
                         local_grid[i, j] = 5
-                    else:
-                        local_grid[i, j] = 0  # Empty space
         return local_grid.flatten()
 
     def get_state(self):
@@ -143,7 +141,7 @@ class SnakeGameAI(gym.Env):
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
             self.done = True
-            reward = -100
+            reward = -10
             return self.get_state(), reward, self.done, {}
 
         self.snake.insert(0, new_head)
@@ -152,13 +150,13 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0
-            reward = 100
+            reward = 10
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()
-            reward = -0.2
+            reward = -0.1
 
-        if self.move_counter >= 2000:
+        if self.move_counter >= 10000:
             self.done = True
             reward = 0
             return self.get_state(), reward, self.done, {}
