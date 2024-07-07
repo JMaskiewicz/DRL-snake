@@ -37,23 +37,27 @@ class ReplayBuffer:
 class DuelingQNetwork(nn.Module):
     def __init__(self, input_dims, n_actions, embedding_dim=32, dropout=0.2):
         super(DuelingQNetwork, self).__init__()
-        self.embedding = nn.Embedding(6, embedding_dim)  # 6 unique values in state representation
-        self.fc1 = nn.Linear(input_dims * embedding_dim, 1024)
+        self.embedding = nn.Embedding(6, embedding_dim)
+        self.fc1 = nn.Linear(input_dims * embedding_dim, 2048)
         self.dropout1 = nn.Dropout(p=dropout)
-        self.fc2 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(2048, 1024)
         self.dropout2 = nn.Dropout(p=dropout)
+        self.fc3 = nn.Linear(1024, 512)
+        self.dropout3 = nn.Dropout(p=dropout)
         self.fc_value = nn.Linear(512, 256)
         self.value = nn.Linear(256, 1)
         self.fc_advantage = nn.Linear(512, 256)
         self.advantage = nn.Linear(256, n_actions)
 
     def forward(self, state):
-        state = state.long()  # Ensure state is of type LongTensor for embedding
-        x = self.embedding(state).view(state.size(0), -1)  # Flatten after embedding
+        state = state.long()
+        x = self.embedding(state).view(state.size(0), -1)
         x = F.relu(self.fc1(x))
-        x = self.dropout1(x)  # Apply dropout after the first layer
+        x = self.dropout1(x)
         x = F.relu(self.fc2(x))
-        x = self.dropout2(x)  # Apply dropout after the second layer
+        x = self.dropout2(x)
+        x = F.relu(self.fc3(x))
+        x = self.dropout3(x)
 
         val = F.relu(self.fc_value(x))
         val = self.value(val)
@@ -124,14 +128,15 @@ class AgentDDQN:
 
         # Training after all episodes are done
         if len(self.replay_buffer) >= self.batch_size:
+            mini_batch_number = 64
             print("Updating model")
-            minibatch_size = len(self.replay_buffer) // 16  # Define minibatch size as 1/16th of replay buffer size
+            minibatch_size = len(self.replay_buffer) // mini_batch_number  # Define minibatch size as 1/16th of replay buffer size
 
             # Ensure the minibatch size is at least 1 and not smaller than the regular batch size
             minibatch_size = max(minibatch_size, 1)
             minibatch_size = min(minibatch_size, self.batch_size)
 
-            for _ in range(16):  # Perform 16 updates to cover the entire replay buffer approximately
+            for _ in range(mini_batch_number):  # Perform 16 updates to cover the entire replay buffer approximately
                 batch = self.replay_buffer.sample(minibatch_size)
                 loss = self.compute_loss(batch)
                 self.optimizer.zero_grad()
@@ -252,28 +257,28 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 1000
-    workers = 8
+    num_episodes = 500
+    workers = 256
     envs = []
     size = 20
-    obstacle_number = 3
-    obstacles = [(random.randint(0, size), random.randint(0, size)) for _ in range(3, obstacle_number)]
+    obstacle_number = 5
+    # obstacles = [(5, 5)] + [(15, 15)] + [(5, 17)]
 
     for _ in range(workers):
-        '''random_number = random.randint(0, size - 2)
+        random_number = random.randint(0, size - 2)
         random_number_2 = random.randint(0, size - 2)
         obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
-                     range(random.randint(0, obstacle_number))]'''
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(1, 1), apple_count=random.randint(1, 3),
+                     range(random.randint(0, obstacle_number))]
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(1, 1), apple_count=random.randint(1, 5),
                           headless=True, size=size)
         envs.append(env)
 
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=64, learning_rate=0.00025, epsilon_decay=0.0025, gamma=0)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=256*64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9)
 
     rewards = []
 
@@ -283,22 +288,21 @@ if __name__ == "__main__":
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 
-
     for episode in tqdm(range(num_episodes)):
         envs = []
         for _ in range(workers):
-            '''random_number = random.randint(0, size - 2)
+            random_number = random.randint(0, size - 2)
             random_number_2 = random.randint(0, size - 2)
             obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
                          (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                         [(random.randint(0, size), random.randint(0, size)) for _ in
-                         range(random.randint(0, obstacle_number))]'''
-            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(1, 1), apple_count=random.randint(1, 3),
+                         range(random.randint(0, obstacle_number))]
+            env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(1, 2), apple_count=random.randint(1, 5),
                               headless=True, size=size)
             envs.append(env)
 
         reward = agent.train(envs, render=False)
-        # reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
+        #reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
@@ -317,10 +321,10 @@ if __name__ == "__main__":
     plt.show()
 
     plt.figure(figsize=(10, 5))
-    plt.plot(agent.losses, label='Loss per Episode')
+    plt.plot(agent.losses, label='Loss per learning step')
     plt.xlabel('Episode')
     plt.ylabel('Loss')
-    plt.title('Loss per Episode over Training')
+    plt.title('Loss per learning step over Training')
     plt.legend()
     plt.grid(True)
     plt.show()
@@ -331,8 +335,6 @@ if __name__ == "__main__":
                  (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                 [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
 
-    env_to_play = SnakeGameAI(obstacles=[], enemy_count=0, apple_count=2, headless=False, size=size)
-
     pygame.init()
-    env_to_play = SnakeGameAI(obstacles=[], enemy_count=0, apple_count=2, headless=False, size=size)
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=3, headless=False, size=size)
     play_with_model(agent.current_model, env_to_play)
