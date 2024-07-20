@@ -74,14 +74,14 @@ class DuelingQNetwork(nn.Module):
 
 class AgentDDQN:
     def __init__(self, input_dims, n_actions, learning_rate=0.005, batch_size=1024,
-                 epsilon_decay=0.995, gamma=0.9):
+                 epsilon_decay=0.995, gamma=0.9, epsilon=1.0):
         self.current_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model.load_state_dict(self.current_model.state_dict())
         self.target_model.eval()
 
         self.replay_buffer = ReplayBuffer(100000)
-        self.epsilon = 1.0
+        self.epsilon = epsilon
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.epsilon_decay = epsilon_decay
@@ -89,6 +89,11 @@ class AgentDDQN:
         self.losses = []
 
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
+
+    def __call__(self, state):
+        with torch.no_grad():
+            return self.current_model(state)
+
     def select_action(self, state, current_direction):
         state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
         with torch.no_grad():
@@ -103,12 +108,7 @@ class AgentDDQN:
         else:
             action = random.choice(valid_actions)  # Choose a random valid action
 
-        # Print the Q-values and the chosen action for debugging purposes
-        # print("Q-values:", q_values.cpu().numpy())
-        # print("Selected action:", action)
-
         return action
-
 
     def train(self, envs, render=False, batch_size=16):
         total_reward = 0
@@ -215,13 +215,13 @@ class AgentDDQN:
         self.learning_rate = state['learning_rate']
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
 
-def play_with_model(model, env):
+def play_with_model(agent, env):
     state = env.reset()
     done = False
 
     while not done:
-        state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
-        action = model(state).argmax(1).item()
+        current_direction = env.direction
+        action = agent.select_action(state, current_direction)
         next_state, reward, done, _ = env.step(action)
         state = next_state
         env.render()
@@ -245,12 +245,13 @@ if __name__ == "__main__":
     observation = env.reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = env.action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9)
-
+    agent = AgentDDQN(input_dims, n_actions, batch_size=64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9, epsilon=0.0)
+    print(agent.epsilon)
     pretrained_model_path = r'C:\Users\jmask\OneDrive\Pulpit\snake\model_episode_0.pth'
     if os.path.exists(pretrained_model_path):
         agent.load_model(pretrained_model_path)
         print(f"Loaded pretrained model from {pretrained_model_path}")
 
     pygame.init()
+    print(agent.epsilon)
     play_with_model(agent, env)

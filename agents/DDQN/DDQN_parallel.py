@@ -214,13 +214,13 @@ class AgentDDQN:
         self.learning_rate = state['learning_rate']
         self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
 
-def play_with_model(model, env):
+def play_with_model(agent, env):
     state = env.reset()
     done = False
 
     while not done:
-        state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
-        action = model(state).argmax(1).item()
+        current_direction = env.direction
+        action = agent.select_action(state, current_direction)
         next_state, reward, done, _ = env.step(action)
         state = next_state
         env.render()
