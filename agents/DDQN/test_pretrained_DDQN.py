@@ -1,7 +1,5 @@
 from game.snake_game import SnakeGameAI
 
-
-import os
 import numpy as np
 import random
 import torch
@@ -13,6 +11,32 @@ import pygame
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import csv
+import os
+
+# parallel version of DDQN
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+class ReplayBuffer:
+    def __init__(self, capacity):
+        self.buffer = deque(maxlen=capacity)
+
+    def push(self, state, action, reward, next_state, done):
+        state = np.expand_dims(state, 0)
+        next_state = np.expand_dims(next_state, 0)
+        self.buffer.append((state, action, reward, next_state, done))
+        # print(f"Added to replay buffer: {len(self.buffer)} / {self.buffer.maxlen}")  # Debugging
+
+    def sample(self, batch_size):
+        samples = random.sample(self.buffer, min(len(self.buffer), batch_size))
+        state, action, reward, next_state, done = zip(*samples)
+        return np.concatenate(state), action, reward, np.concatenate(next_state), done
+
+    def __len__(self):
+        return len(self.buffer)
+
+    def clear(self):
+        self.buffer.clear()
 
 class DuelingQNetwork(nn.Module):
     def __init__(self, input_dims, n_actions, embedding_dim=32, dropout=0.2):
@@ -48,7 +72,6 @@ class DuelingQNetwork(nn.Module):
         q_values = val + (adv - adv.mean(dim=1, keepdim=True))
         return q_values
 
-
 class AgentDDQN:
     def __init__(self, input_dims, n_actions, learning_rate=0.005, batch_size=1024,
                  epsilon_decay=0.995, gamma=0.9):
@@ -56,12 +79,16 @@ class AgentDDQN:
         self.target_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model.load_state_dict(self.current_model.state_dict())
         self.target_model.eval()
-        self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
+
+        self.replay_buffer = ReplayBuffer(100000)
         self.epsilon = 1.0
+        self.learning_rate = learning_rate
         self.gamma = gamma
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
+        self.losses = []
 
+        self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
     def select_action(self, state, current_direction):
         state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
         with torch.no_grad():
@@ -70,10 +97,93 @@ class AgentDDQN:
         valid_actions = self.get_valid_actions(current_direction)
         valid_q_values = q_values[0, valid_actions]  # Get Q-values only for valid actions
 
-        action_index = valid_q_values.argmax().item()  # Choose best action based on current policy
-        action = valid_actions[action_index]
+        if random.random() > self.epsilon:
+            action_index = valid_q_values.argmax().item()  # Choose best action based on current policy
+            action = valid_actions[action_index]
+        else:
+            action = random.choice(valid_actions)  # Choose a random valid action
+
+        # Print the Q-values and the chosen action for debugging purposes
+        # print("Q-values:", q_values.cpu().numpy())
+        # print("Selected action:", action)
 
         return action
+
+
+    def train(self, envs, render=False, batch_size=16):
+        total_reward = 0
+
+        def run_env(idx, env):
+            state = env.reset()
+            current_direction = env.direction
+            done = False
+            reward_sum = 0
+
+            while not done:
+                action = self.select_action(state, current_direction)
+                next_state, reward, done, _ = env.step(action)
+                self.replay_buffer.push(state, action, reward, next_state, done)
+                state = next_state
+                current_direction = env.direction
+                reward_sum += reward
+                if render:
+                    env.render()
+                    pygame.time.wait(100)
+            return reward_sum
+
+        for i in range(0, len(envs), batch_size):
+            batch_envs = envs[i:i+batch_size]
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                futures = [executor.submit(run_env, idx, env) for idx, env in enumerate(batch_envs)]
+                for future in as_completed(futures):
+                    total_reward += future.result()
+
+        # Training after all episodes are done
+        if len(self.replay_buffer) >= self.batch_size:
+            mini_batch_number = 64
+            print("Updating model")
+            minibatch_size = len(self.replay_buffer) // mini_batch_number  # Define minibatch size as 1/n th of replay buffer size
+
+            # Ensure the minibatch size is at least 1 and not smaller than the regular batch size
+            minibatch_size = max(minibatch_size, 1)
+            minibatch_size = min(minibatch_size, self.batch_size)
+
+            for _ in range(mini_batch_number):  # Perform 16 updates to cover the entire replay buffer approximately
+                batch = self.replay_buffer.sample(minibatch_size)
+                loss = self.compute_loss(batch)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                self.losses.append(loss.item())
+            self.replay_buffer.clear()
+
+        return total_reward
+
+    def compute_loss(self, batch):
+        states, actions, rewards, next_states, dones = batch
+
+        states = torch.FloatTensor(states).view(states.shape[0], -1)
+        next_states = torch.FloatTensor(next_states).view(next_states.shape[0], -1)
+        actions = torch.LongTensor(actions)
+        rewards = torch.FloatTensor(rewards)
+        dones = torch.FloatTensor(dones)
+
+        q_values = self.current_model(states)
+        next_q_values = self.current_model(next_states)
+        next_q_state_values = self.target_model(next_states)
+
+        q_value = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+        next_q_value = next_q_state_values.gather(1, torch.max(next_q_values, 1)[1].unsqueeze(1)).squeeze(1)
+        expected_q_value = rewards + self.gamma * next_q_value * (1 - dones)
+
+        loss = (q_value - expected_q_value.detach()).pow(2).mean()
+        return loss
+
+    def update_epsilon(self):
+        self.epsilon = self.epsilon - self.epsilon_decay
+
+    def update_target_network(self):
+        self.target_model.load_state_dict(self.current_model.state_dict())
 
     def get_valid_actions(self, current_direction):
         direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
@@ -82,18 +192,36 @@ class AgentDDQN:
         valid_actions = [i for i in range(len(direction_map)) if i != opposite_direction_map[current_direction_index]]
         return valid_actions
 
+    def save_model(self, filepath):
+        state = {
+            'model_state_dict': self.current_model.state_dict(),
+            'epsilon': self.epsilon,
+            'gamma': self.gamma,
+            'epsilon_decay': self.epsilon_decay,
+            'batch_size': self.batch_size,
+            'learning_rate': self.learning_rate
+        }
+        torch.save(state, filepath)
+        print(f"Model saved to {filepath}")
+
     def load_model(self, filepath):
-        self.current_model.load_state_dict(torch.load(filepath))
+        state = torch.load(filepath)
+        self.current_model.load_state_dict(state['model_state_dict'])
         self.target_model.load_state_dict(self.current_model.state_dict())
+        self.epsilon = state['epsilon']
+        self.gamma = state['gamma']
+        self.epsilon_decay = state['epsilon_decay']
+        self.batch_size = state['batch_size']
+        self.learning_rate = state['learning_rate']
+        self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
 
-
-def play_with_model(agent, env):
+def play_with_model(model, env):
     state = env.reset()
     done = False
 
     while not done:
-        current_direction = env.direction
-        action = agent.select_action(state, current_direction)
+        state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
+        action = model(state).argmax(1).item()
         next_state, reward, done, _ = env.step(action)
         state = next_state
         env.render()

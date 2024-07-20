@@ -78,14 +78,16 @@ class AgentDDQN:
         self.target_model = DuelingQNetwork(input_dims, n_actions)
         self.target_model.load_state_dict(self.current_model.state_dict())
         self.target_model.eval()
-        self.optimizer = optim.Adam(self.current_model.parameters(), lr=learning_rate)
+
         self.replay_buffer = ReplayBuffer(100000)
         self.epsilon = 1.0
+        self.learning_rate = learning_rate
         self.gamma = gamma
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
         self.losses = []
 
+        self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
     def select_action(self, state, current_direction):
         state = torch.FloatTensor(state).view(1, -1)  # Flatten the state
         with torch.no_grad():
@@ -199,6 +201,7 @@ class AgentDDQN:
             'learning_rate': self.learning_rate
         }
         torch.save(state, filepath)
+        print(f"Model saved to {filepath}")
 
     def load_model(self, filepath):
         state = torch.load(filepath)
@@ -279,7 +282,7 @@ if __name__ == "__main__":
         if episode % 10 == 0:
             agent.update_target_network()
 
-        if episode % 100 == 0:
+        if episode % 10 == 0:
             agent.save_model(os.path.join(log_dir, f'model_episode_{episode}.pth'))
 
         agent.update_epsilon()
