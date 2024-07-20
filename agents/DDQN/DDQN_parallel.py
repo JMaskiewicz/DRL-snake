@@ -189,6 +189,28 @@ class AgentDDQN:
         valid_actions = [i for i in range(len(direction_map)) if i != opposite_direction_map[current_direction_index]]
         return valid_actions
 
+    def save_model(self, filepath):
+        state = {
+            'model_state_dict': self.current_model.state_dict(),
+            'epsilon': self.epsilon,
+            'gamma': self.gamma,
+            'epsilon_decay': self.epsilon_decay,
+            'batch_size': self.batch_size,
+            'learning_rate': self.learning_rate
+        }
+        torch.save(state, filepath)
+
+    def load_model(self, filepath):
+        state = torch.load(filepath)
+        self.current_model.load_state_dict(state['model_state_dict'])
+        self.target_model.load_state_dict(self.current_model.state_dict())
+        self.epsilon = state['epsilon']
+        self.gamma = state['gamma']
+        self.epsilon_decay = state['epsilon_decay']
+        self.batch_size = state['batch_size']
+        self.learning_rate = state['learning_rate']
+        self.optimizer = optim.Adam(self.current_model.parameters(), lr=self.learning_rate)
+
 def play_with_model(model, env):
     state = env.reset()
     done = False
@@ -205,11 +227,11 @@ def play_with_model(model, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 1000
-    workers = 256
+    num_episodes = 100  # 1000
+    workers = 1  # 256
     envs = []
     size = 20
-    obstacle_number = 10
+    obstacle_number = 15
     # obstacles = [(5, 5)] + [(15, 15)] + [(5, 17)]
 
     for _ in range(workers):
@@ -226,7 +248,7 @@ if __name__ == "__main__":
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=256*64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=workers*64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9)
 
     rewards = []
 
@@ -250,12 +272,15 @@ if __name__ == "__main__":
             envs.append(env)
 
         reward = agent.train(envs, render=False)
-        #reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
+        # reward = agent.train_with_logging(envs, episode, render=True, log_dir=log_dir)
         rewards.append(reward)
         print(f"Episode {episode}, Reward: {reward}")
 
         if episode % 10 == 0:
             agent.update_target_network()
+
+        if episode % 100 == 0:
+            agent.save_model(os.path.join(log_dir, f'model_episode_{episode}.pth'))
 
         agent.update_epsilon()
 

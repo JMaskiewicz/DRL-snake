@@ -4,14 +4,6 @@ import random
 import gym
 from gym import spaces
 
-
-'''
-0: Move up (direction (0, -1))
-1: Move down (direction (0, 1))
-2: Move left (direction (-1, 0))
-3: Move right (direction (1, 0))
-'''
-
 class SnakeGameAI(gym.Env):
     def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True, size=64):
         super(SnakeGameAI, self).__init__()
@@ -81,27 +73,23 @@ class SnakeGameAI(gym.Env):
 
     def move_enemy(self, enemy):
         directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-        direction = random.choice(directions)
-        new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
+        random.shuffle(directions)  # Shuffle directions to make movement more random
 
-        if not (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size) or new_head in enemy or new_head in self.obstacles:
-            valid_directions = [
-                (d[0], d[1]) for d in directions
-                if 0 <= enemy[0][0] + d[0] < self.size and 0 <= enemy[0][1] + d[1] < self.size
-                   and (enemy[0][0] + d[0], enemy[0][1] + d[1]) not in enemy and (
-                   enemy[0][0] + d[0], enemy[0][1] + d[1]) not in self.obstacles
-            ]
-            if valid_directions:
-                direction = random.choice(valid_directions)
-                new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
-            else:
-                return
+        for direction in directions:
+            new_head = (enemy[0][0] + direction[0], enemy[0][1] + direction[1])
 
-        enemy.insert(0, new_head)
-        if new_head in self.apples:
-            self.apples[self.apples.index(new_head)] = self.spawn_apple()  # Respawn apple
-        else:
-            enemy.pop()
+            # Check if the new head is valid
+            if (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size and
+                new_head not in enemy and
+                new_head not in self.obstacles and
+                new_head not in self.snake):
+
+                enemy.insert(0, new_head)
+                if new_head in self.apples:
+                    self.apples[self.apples.index(new_head)] = self.spawn_apple()  # Respawn apple
+                else:
+                    enemy.pop()
+                break
 
     def get_local_grid(self, head, size=37):
         local_grid = np.full((size, size), 4, dtype=int)  # Fill the grid with obstacles (4)
