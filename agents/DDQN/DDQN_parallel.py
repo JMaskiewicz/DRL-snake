@@ -230,8 +230,8 @@ def play_with_model(agent, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 100  # 1000
-    workers = 1  # 256
+    num_episodes = 1000  # 1000
+    workers = 256  # 256
     envs = []
     size = 20
     obstacle_number = 15
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     observation = envs[0].reset()
     input_dims = np.prod(observation.shape)  # Adjusting for flattened input
     n_actions = envs[0].action_space.n
-    agent = AgentDDQN(input_dims, n_actions, batch_size=workers*64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9)
+    agent = AgentDDQN(input_dims, n_actions, batch_size=workers*64, learning_rate=0.00025, epsilon_decay=0.0025, gamma=0.9)
 
     rewards = []
 
@@ -282,7 +282,7 @@ if __name__ == "__main__":
         if episode % 10 == 0:
             agent.update_target_network()
 
-        if episode % 10 == 0:
+        if episode % 100 == 0:
             agent.save_model(os.path.join(log_dir, f'model_episode_{episode}.pth'))
 
         agent.update_epsilon()
