@@ -230,7 +230,7 @@ def play_with_model(agent, env):
     print(f"Game Over! Score: {env.score}")
 
 if __name__ == "__main__":
-    num_episodes = 1000  # 1000
+    num_episodes = 1001  # 1000
     workers = 256  # 256
     envs = []
     size = 20
@@ -244,7 +244,7 @@ if __name__ == "__main__":
                      (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
                     [(random.randint(0, size), random.randint(0, size)) for _ in
                      range(random.randint(0, obstacle_number))]
-        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(1, 1), apple_count=random.randint(1, 5),
+        env = SnakeGameAI(obstacles=obstacles, enemy_count=random.randint(0, 0), apple_count=random.randint(1, 5),
                           headless=True, size=size)
         envs.append(env)
 
@@ -312,5 +312,5 @@ if __name__ == "__main__":
                 [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, obstacle_number))]
 
     pygame.init()
-    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=1, apple_count=3, headless=False, size=size)
-    play_with_model(agent.current_model, env_to_play)
+    env_to_play = SnakeGameAI(obstacles=obstacles, enemy_count=0, apple_count=3, headless=False, size=size)
+    play_with_model(agent, env_to_play)

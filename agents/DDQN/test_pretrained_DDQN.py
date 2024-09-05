@@ -247,7 +247,7 @@ if __name__ == "__main__":
     n_actions = env.action_space.n
     agent = AgentDDQN(input_dims, n_actions, batch_size=64, learning_rate=0.00025, epsilon_decay=0.005, gamma=0.9, epsilon=0.0)
     print(agent.epsilon)
-    pretrained_model_path = r'C:\Users\jmask\OneDrive\Pulpit\snake\model_episode_0.pth'
+    pretrained_model_path = r'C:\Users\jmask\OneDrive\Pulpit\snake\model_episode_600.pth'
     if os.path.exists(pretrained_model_path):
         agent.load_model(pretrained_model_path)
         print(f"Loaded pretrained model from {pretrained_model_path}")

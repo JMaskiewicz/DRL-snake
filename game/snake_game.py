@@ -4,19 +4,34 @@ import random
 import gym
 from gym import spaces
 
+
+class SnakeCell:
+    """Represents a single cell of the snake."""
+
+    def __init__(self, x, y, is_head=False):
+        self.x = x
+        self.y = y
+        self.is_head = is_head
+
+
 class SnakeGameAI(gym.Env):
     def __init__(self, model=None, obstacles=None, enemy_count=1, apple_count=1, headless=True, size=64):
         super(SnakeGameAI, self).__init__()
         pygame.init()
         self.size = size  # Size of the grid
-        self.cell_size = 10  # Size of each cell
+        self.cell_size = 25  # Size of each cell
         self.width, self.height = self.size * self.cell_size, self.size * self.cell_size
         self.headless = headless
         self.move_log = []
+        self.score_area_height = 80  # Height of the score area at the top
 
-        if not headless:  # If not headless, create a display window
-            self.screen = pygame.display.set_mode((self.width, self.height))
+        # Create a display window with additional space for the score
+        if not headless:
+            self.screen = pygame.display.set_mode((self.width, self.height + self.score_area_height))
             pygame.display.set_caption('Snake Game AI')
+
+        # Larger font for the centered score display
+        self.font = pygame.font.SysFont(None, 72)  # 72-point font for large score text
 
         self.model = model
         self.is_human = True if model is None else False
@@ -29,9 +44,9 @@ class SnakeGameAI(gym.Env):
 
         # Initialize obstacles with borders included
         self.border_obstacles = [(i, 0) for i in range(self.size)] + \
-                         [(i, self.size - 1) for i in range(self.size)] + \
-                         [(0, j) for j in range(self.size)] + \
-                         [(self.size - 1, j) for j in range(self.size)]
+                                [(i, self.size - 1) for i in range(self.size)] + \
+                                [(0, j) for j in range(self.size)] + \
+                                [(self.size - 1, j) for j in range(self.size)]
         self.custom_obstacles = obstacles if obstacles is not None else []
         self.obstacles = self.border_obstacles + self.custom_obstacles
         self.score = 0
@@ -43,9 +58,10 @@ class SnakeGameAI(gym.Env):
         self.reset()
 
     def reset(self):
-        self.snake = [(self.size // 2, self.size // 2),
-                      (self.size // 2, self.size // 2 + 1),
-                      (self.size // 2, self.size // 2 + 2)]
+        # Snake represented as a list of SnakeCell objects
+        self.snake = [SnakeCell(self.size // 2, self.size // 2, is_head=True),
+                      SnakeCell(self.size // 2, self.size // 2 + 1),
+                      SnakeCell(self.size // 2, self.size // 2 + 2)]
         self.direction = (0, -1)
         self.apples = [self.spawn_apple() for _ in range(self.apple_count)]
         self.score = 0
@@ -58,7 +74,7 @@ class SnakeGameAI(gym.Env):
     def spawn_apple(self):
         while True:
             apple = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
-            if apple not in self.snake and all(
+            if apple not in [(cell.x, cell.y) for cell in self.snake] and all(
                     apple not in enemy for enemy in self.enemies) and apple not in self.obstacles:
                 return apple
 
@@ -67,7 +83,8 @@ class SnakeGameAI(gym.Env):
         while True:
             start_pos = (random.randint(0, self.size - 1), random.randint(0, self.size - 1))
             enemy = [(start_pos[0], start_pos[1] + i) for i in range(5)]
-            if all(0 <= part[1] < self.size for part in enemy) and all(part not in self.snake for part in enemy):
+            if all(0 <= part[1] < self.size for part in enemy) and all(
+                    part not in [(cell.x, cell.y) for cell in self.snake] for part in enemy):
                 break
         return enemy
 
@@ -80,9 +97,9 @@ class SnakeGameAI(gym.Env):
 
             # Check if the new head is valid
             if (0 <= new_head[0] < self.size and 0 <= new_head[1] < self.size and
-                new_head not in enemy and
-                new_head not in self.obstacles and
-                new_head not in self.snake):
+                    new_head not in enemy and
+                    new_head not in self.obstacles and
+                    new_head not in [(cell.x, cell.y) for cell in self.snake]):
 
                 enemy.insert(0, new_head)
                 if new_head in self.apples:
@@ -99,8 +116,10 @@ class SnakeGameAI(gym.Env):
                 x = head[0] - half_size + i
                 y = head[1] - half_size + j
                 if 0 <= x < self.size and 0 <= y < self.size:
-                    if (x, y) in self.snake:
-                        local_grid[i, j] = 1 if (x, y) == head else 2
+                    if (x, y) == (self.snake[0].x, self.snake[0].y):
+                        local_grid[i, j] = 1  # Snake's head
+                    elif (x, y) in [(cell.x, cell.y) for cell in self.snake[1:]]:
+                        local_grid[i, j] = 2  # Snake's body
                     elif (x, y) in self.apples:
                         local_grid[i, j] = 3
                     elif (x, y) in self.obstacles:
@@ -112,7 +131,7 @@ class SnakeGameAI(gym.Env):
         return local_grid.flatten()
 
     def get_state(self):
-        head = self.snake[0]
+        head = (self.snake[0].x, self.snake[0].y)
         return self.get_local_grid(head)
 
     def step(self, action):
@@ -125,8 +144,10 @@ class SnakeGameAI(gym.Env):
             action = current_direction_index
 
         self.direction = direction_map[action]
-        new_head = (self.snake[0][0] + self.direction[0], self.snake[0][1] + self.direction[1])
-        collision_objects = self.snake[1:] + self.obstacles + [part for enemy in self.enemies for part in enemy]
+        new_head = (self.snake[0].x + self.direction[0], self.snake[0].y + self.direction[1])
+        collision_objects = [(cell.x, cell.y) for cell in self.snake[1:]] + self.obstacles + [part for enemy in
+                                                                                              self.enemies for part in
+                                                                                              enemy]
 
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
@@ -134,7 +155,9 @@ class SnakeGameAI(gym.Env):
             reward = -100
             return self.get_state(), reward, self.done, {}
 
-        self.snake.insert(0, new_head)
+        # Insert new head
+        self.snake.insert(0, SnakeCell(new_head[0], new_head[1], is_head=True))
+        self.snake[1].is_head = False  # Previous head is no longer the head
         self.move_counter += 1
 
         if new_head in self.apples:
@@ -143,7 +166,7 @@ class SnakeGameAI(gym.Env):
             reward = 100
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
-            self.snake.pop()
+            self.snake.pop()  # Remove the tail
             reward = -1
 
         if self.move_counter >= 1000:
@@ -170,20 +193,39 @@ class SnakeGameAI(gym.Env):
         if self.headless:
             return
         self.screen.fill((0, 0, 0))
-        for i, (x, y) in enumerate(self.snake):
-            color = (0, 130, 0) if i == 0 else (0, 255, 0)  # Darker green for the head
+
+        # Render the snake as objects
+        for cell in self.snake:
+            color = (0, 130, 0) if cell.is_head else (0, 255, 0)  # Darker green for the head
             pygame.draw.rect(self.screen, color,
-                             (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
+                             (cell.x * self.cell_size, cell.y * self.cell_size + self.score_area_height, self.cell_size,
+                              self.cell_size))
+
+        # Render apples
         for apple in self.apples:
             pygame.draw.rect(self.screen, (255, 0, 0),
-                             (apple[0] * self.cell_size, apple[1] * self.cell_size, self.cell_size, self.cell_size))
+                             (apple[0] * self.cell_size, apple[1] * self.cell_size + self.score_area_height,
+                              self.cell_size, self.cell_size))
+
+        # Render enemies
         for enemy in self.enemies:
             for x, y in enemy:
                 pygame.draw.rect(self.screen, (255, 200, 0),
-                                 (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
+                                 (x * self.cell_size, y * self.cell_size + self.score_area_height, self.cell_size,
+                                  self.cell_size))
+
+        # Render obstacles
         for x, y in self.obstacles:
             pygame.draw.rect(self.screen, (0, 0, 255),
-                             (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
+                             (x * self.cell_size, y * self.cell_size + self.score_area_height, self.cell_size,
+                              self.cell_size))
+
+        # Render the score
+        score_text = self.font.render(f'Score: {self.score}', True, (255, 255, 255))
+        score_rect = score_text.get_rect(
+            center=(self.width // 2, self.score_area_height // 2))  # Center the text at the top
+        self.screen.blit(score_text, score_rect)
+
         pygame.display.flip()
 
     def run_game(self):
@@ -226,13 +268,11 @@ class SnakeGameAI(gym.Env):
     def close(self):
         pygame.quit()
 
+
 # Example usage:
 if __name__ == '__main__':
-    size = 64
-    random_number = random.randint(0, size - 2)
-    random_number_2 = random.randint(0, size - 2)
-    obstacles = [(random_number, random_number_2), (random_number + 1, random_number_2),
-                 (random_number, random_number_2 + 1), (random_number + 1, random_number_2 + 1)] + \
-                [(random.randint(0, size), random.randint(0, size)) for _ in range(random.randint(0, 10))]
-    game = SnakeGameAI(obstacles=obstacles, enemy_count=4, apple_count=3, headless=False, size=size)  # Set headless to False to render and play as human
+    size = 30
+    obstacles = []
+    game = SnakeGameAI(obstacles=obstacles, enemy_count=0, apple_count=2, headless=False,
+                       size=size)
     game.run_game()
