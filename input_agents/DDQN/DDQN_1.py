@@ -364,7 +364,7 @@ if __name__ == '__main__':
     input_dims = 6 + grid_size
 
     agent = AgentDDQN(input_dims=input_dims, n_actions=env.action_space.n, epsilon_decay=0.0015)
-    agent.train(env, num_episodes=100)
+    agent.train(env, num_episodes=1000)
 
     pygame.init()
     env_to_play = SnakeGameAI(headless=False, grid_range=grid_range)
