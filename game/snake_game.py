@@ -152,7 +152,7 @@ class SnakeGameAI(gym.Env):
         if new_head[0] < 0 or new_head[0] >= self.size or new_head[1] < 0 or new_head[
             1] >= self.size or new_head in collision_objects:
             self.done = True
-            reward = -100
+            reward = -10
             return self.get_state(), reward, self.done, {}
 
         # Insert new head
@@ -163,11 +163,11 @@ class SnakeGameAI(gym.Env):
         if new_head in self.apples:
             self.score += 1
             self.move_counter = 0
-            reward = 100
+            reward = 10
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
         else:
             self.snake.pop()  # Remove the tail
-            reward = -1
+            reward = -0.01
 
         if self.move_counter >= 1000:
             self.done = True
@@ -267,6 +267,29 @@ class SnakeGameAI(gym.Env):
 
     def close(self):
         pygame.quit()
+
+    def is_collision(self, point):
+        """
+        Returns True if the point will cause a collision with:
+        - the walls (bounds of the game)
+        - the snake itself
+        - obstacles or enemies
+        """
+        x, y = point
+
+        # Check if point is out of bounds (colliding with walls)
+        if x < 0 or x >= self.size or y < 0 or y >= self.size:
+            return True
+
+        # Check if point collides with the snake body
+        if any(cell.x == x and cell.y == y for cell in self.snake[1:]):
+            return True
+
+        # Check if point collides with obstacles or enemies
+        if (x, y) in self.obstacles or any((x, y) in enemy for enemy in self.enemies):
+            return True
+
+        return False
 
 
 # Example usage:
