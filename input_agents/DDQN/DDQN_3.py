@@ -14,7 +14,6 @@ import os
 
 class SnakeCell:
     """Represents a single cell of the snake."""
-
     def __init__(self, x, y, is_head=False):
         self.x = x
         self.y = y
@@ -75,24 +74,26 @@ class SnakeGameAI(gym.Env):
                 return apple
 
     def step(self, action):
-        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        direction_map = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Up, Down, Left, Right
         self.direction = direction_map[action]
         new_head = (self.snake[0].x + self.direction[0], self.snake[0].y + self.direction[1])
 
         if self.is_collision(new_head):
+            print("Collision detected, game over!")
             self.done = True
             return self.get_state(), -10, True, {}
 
+        # Move snake
         self.snake.insert(0, SnakeCell(new_head[0], new_head[1], is_head=True))
         self.snake[1].is_head = False
 
         if new_head in self.apples:
             self.score += 1
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
-            reward = 20
+            reward = 10
         else:
-            self.snake.pop()
-            reward = -0.01
+            self.snake.pop()  # Remove the tail
+            reward = -0.01  # Small penalty for each step
 
         self.move_counter += 1
         if self.move_counter > 100 * len(self.snake):
@@ -285,7 +286,7 @@ class AgentDDQN:
             done = False
             total_reward = 0
 
-            for step in range(max_steps):
+            while not done:
                 action = self.select_action(state, env)
                 next_state, reward, done, _ = env.step(action)
                 self.replay_buffer.push(state, action, reward, next_state, done)
@@ -294,9 +295,6 @@ class AgentDDQN:
 
                 if len(self.replay_buffer) >= self.batch_size:
                     self.learn()
-
-                if done:
-                    break
 
             rewards_history.append(total_reward)
 
@@ -367,8 +365,10 @@ class AgentDDQN:
         plt.show()
 
 
+
 def play_with_model(agent, env, generations=1):
     """Play with the current model and allow exploration using epsilon."""
+    clock = pygame.time.Clock()  # Create a clock object to control the game's frame rate
     state = env.reset()
     done = False
 
@@ -378,14 +378,14 @@ def play_with_model(agent, env, generations=1):
                 pygame.quit()
                 return  # Exit the game if the window is closed
 
-        # Select action based on epsilon (exploration) or greedy (exploitation)
         action = agent.select_action(state, env)
         next_state, reward, done, _ = env.step(action)
         state = next_state
-        env.render(generation=generations)  # Pass the generation number for display
+        env.render(generation=generations)
 
-        pygame.time.wait(100)  # Wait between frames to prevent instant closing
+        clock.tick(10)  # Control the frame rate, limiting to 10 frames per second
 
+    pygame.time.wait(2000)  # Wait for a short period after the game ends
     env.close()
 
 def load_model(agent, generation, model_path):
@@ -419,12 +419,14 @@ if __name__ == '__main__':
                       save_path=r"C:\Pulpit\snake\snake_DQN", save_generations=[0, 100, 500, 1000, 2500, 5000])
 
     # Train the agent and save models at specified generations
-    agent.train(env, num_episodes=201)
+    agent.train(env, num_episodes=1101)
 
     env_to_play = SnakeGameAI(headless=False, grid_range=grid_range)
     play_with_model(agent, env_to_play, generations=agent.generation)
 
-    for gen in [0, 100]:
+    # Load and play with the saved modelsprint("Playing with the loaded model")
+    print("Playing with the loaded model")
+    for gen in [0, 100, 500, 1000]:
         print(f"Playing with model from generation {gen}")
         env_to_play = SnakeGameAI(headless=False, grid_range=grid_range)
         play_with_loaded_model(agent, env_to_play, gen, r"C:\Pulpit\snake\snake_DQN")
