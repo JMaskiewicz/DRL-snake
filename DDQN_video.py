@@ -12,13 +12,13 @@ import matplotlib.pyplot as plt
 import os
 
 # eating apple sound
-#pygame.mixer.init()
-#apple_pop_sound = pygame.mixer.Sound(r'C:\Users\jmask\Downloads\apple-munch-40169.mp3')
+pygame.mixer.init()
+apple_pop_sound = pygame.mixer.Sound(r'C:\Users\jmask\Downloads\apple-munch-40169.mp3')
 
 # music in background
-#pygame.mixer.music.load(r'C:\Users\jmask\Downloads\better-day-186374.mp3')
-#pygame.mixer.music.set_volume(0.2)
-#pygame.mixer.music.play(-1)  # -1 makes the music loop indefinitely
+pygame.mixer.music.load(r'C:\Users\jmask\Downloads\better-day-186374.mp3')
+pygame.mixer.music.set_volume(0.2)
+pygame.mixer.music.play(-1)  # -1 makes the music loop indefinitely
 
 class SnakeCell:
     """Represents a single cell of the snake."""
@@ -29,12 +29,12 @@ class SnakeCell:
 
 
 class SnakeGameAI(gym.Env):
-    def __init__(self, apple_count=1, headless=True, rows=20, cols=15, grid_range=1):
+    def __init__(self, apple_count=1, headless=True, rows=30, cols=20, grid_range=1):
         super(SnakeGameAI, self).__init__()
         pygame.init()
         self.rows = rows
         self.cols = cols
-        self.cell_size = 40
+        self.cell_size = 30
         self.border_thickness = 5
 
         self.width, self.height = 720, 1280
@@ -99,17 +99,17 @@ class SnakeGameAI(gym.Env):
             self.apples[self.apples.index(new_head)] = self.spawn_apple()
 
             # Play apple-eating sound
-            # apple_pop_sound.play()
+            apple_pop_sound.play()
 
-            reward = 10 * len(self.snake)
+            reward = 10
         else:
             self.snake.pop()  # Remove the tail
-            reward = -0.05  # Small penalty for each step
+            reward = -0.01  # Small penalty for each step
 
         self.move_counter += 1
         if self.move_counter > 100 * len(self.snake):
             self.done = True
-            reward = -100
+            reward = -10
 
         return self.get_state(), reward, self.done, {}
 
@@ -166,6 +166,16 @@ class SnakeGameAI(gym.Env):
             return
 
         self.screen.fill((0, 0, 0))
+
+        watermark_font = pygame.font.SysFont(None, 36)
+        watermark_texts = [
+            watermark_font.render("yt:@jbbm_motions", True, (30, 30, 30)),
+            watermark_font.render("tiktok:@jbbm_motions", True, (30, 30, 30)),
+            watermark_font.render("subscribe for more!", True, (30, 30, 30)),
+            watermark_font.render("Comment what game do next!", True, (30, 30, 30))
+        ]
+        for idx, text in enumerate(watermark_texts):
+            self.screen.blit(text, (720 // 2 - text.get_width() // 2, 1000 + idx * 30))
 
         title_font = pygame.font.SysFont('Verdana', 42, bold=True)
         info_font = pygame.font.SysFont('Arial', 36)
@@ -290,7 +300,7 @@ class Linear_QNet(nn.Module):
 
 
 class AgentDDQN:
-    def __init__(self, input_dims, n_actions, hidden_dim1=1024, hidden_dim2=512, learning_rate=0.0005, batch_size=256,
+    def __init__(self, input_dims, n_actions, hidden_dim1=1024, hidden_dim2=512, learning_rate=0.001, batch_size=256,
                  epsilon_decay=0.0005, gamma=0.9, save_path=None, save_generations=None):
         self.current_model = Linear_QNet(input_dims, hidden_dim1, hidden_dim2, n_actions)
         self.target_model = Linear_QNet(input_dims, hidden_dim1, hidden_dim2, n_actions)
@@ -334,7 +344,7 @@ class AgentDDQN:
     def train(self, env, num_episodes=1000, max_steps=1000):
         rewards_history = []
         for episode in tqdm(range(num_episodes)):
-            if episode % 500 == 0 and episode > 0:
+            if episode % 1000 == 0 and episode > 0:
                 print(f'Episode {episode}/{num_episodes}')
                 self.replay_buffer.clear()
 
@@ -485,25 +495,25 @@ def play_with_loaded_model(agent, env, generation, model_path):
 if __name__ == '__main__':
     pygame.init()  # Initialize Pygame
 
-    grid_range = 15
+    grid_range = 1
     env = SnakeGameAI(headless=False, grid_range=grid_range)
 
     grid_size = (2 * grid_range + 1) ** 2
     input_dims = 6 + grid_size
 
     agent = AgentDDQN(input_dims=input_dims, n_actions=env.action_space.n, epsilon_decay=0.0025,
-                      save_path=r"C:\Pulpit\snake\snake_DQN", save_generations=[0, 100, 250, 500, 1000, 2000])
-
+                      save_path=r"C:\Pulpit\snake\snake_DQN", save_generations=[0, 100, 250, 500, 750, 1000])
+    '''
     # Train the agent and save models at specified generations
-    agent.train(env, num_episodes=2001)
+    agent.train(env, num_episodes=1001)
 
     env_to_play = SnakeGameAI(headless=False, grid_range=grid_range)
-    play_with_model(agent, env_to_play, generations=agent.generation)
+    play_with_model(agent, env_to_play, generations=agent.generation)'''
 
-    # Load and play with the saved models
+    # Load and play with the saved modelsprint("Playing with the loaded model")
     print("Playing with the loaded model")
     # [0, 100, 250, 500, 750, 1000]
-    for gen in [0]:
+    for gen in [1000]:
         print(f"Playing with model from generation {gen}")
         env_to_play = SnakeGameAI(headless=False, grid_range=grid_range)
         play_with_loaded_model(agent, env_to_play, gen, r"C:\Pulpit\snake\snake_DQN")
